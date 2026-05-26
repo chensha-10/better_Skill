@@ -66,6 +66,8 @@ test_cases/case_001/
 ├── expected.txt        # 期望的文本输出
 ├── expected_files/     # 期望的输出文件
 │   └── result.txt
+├── input_files/        # [可选] 执行前复制到工作目录的初始文件
+│   └── source.py
 └── metadata.json       # 用例元数据
 ```
 
@@ -143,6 +145,7 @@ python main.py init-case <用例名> [--type text|files|mixed] [--min-score 0.85
 | `--type` | 用例类型 | `mixed` |
 | `--min-score` | 通过的最低分数 | `0.85` |
 | `--timeout` | 执行超时（秒） | `120` |
+| `--with-input-files` | 创建 input_files/ 初始文件目录 | `False` |
 
 ## 配置文件
 
