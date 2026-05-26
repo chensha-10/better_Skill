@@ -1,0 +1,6 @@
+{
+  "name": "case_001",
+  "type": "text",
+  "min_score": 0.85,
+  "timeout_seconds": 120
+}

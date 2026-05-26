@@ -1,0 +1,19 @@
+{
+  "skill_path": "./workspace/SKILL.md",
+  "test_cases_dir": "./test_cases",
+  "workspace_dir": "./workspace",
+  "runs_dir": "./workspace/runs",
+  "backups_dir": "./workspace/backups",
+  "executor": {
+    "command": "claude",
+    "model": "claude-sonnet-4-6"
+  },
+  "judge": {
+    "command": "claude",
+    "model": "claude-opus-4-7"
+  },
+  "reviser": {
+    "command": "claude",
+    "model": "claude-opus-4-7"
+  }
+}
