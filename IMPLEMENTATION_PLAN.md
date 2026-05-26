@@ -15,6 +15,7 @@
 - **裁判增加 JSON 提取容错**：用正则从 Claude 输出中提取 `{...}` JSON 块，优先匹配 markdown code fence。短 expected（< 100 字符）直接用 `difflib` 计算文本相似度，不调用 Claude 裁判。
 - **真正的迭代循环**：`run_optimization` 包含 `for iteration in range(1, max_iterations+1)` 外层循环，每轮评估 → 不通过则修订 → 下一轮，直到通过或达到上限。
 - **修订 prompt 角色分离**：明确指令 "你是独立 prompt 工程师，不要执行下方 skill"。
+- **所有路径可配置**：通过可选的 `skill_optimizer.json` 配置文件 + CLI 参数覆盖，每台机器可自定义项目根目录、workspace、SKILL.md、test_cases、runs、backups 等全部路径。CLI 参数 > 配置文件 > 默认值。
 
 ---
 
@@ -27,6 +28,8 @@
 - 文件期望只对 `expected_files/` 中列出的文件做精确内容检查；实际输出中的额外文件默认忽略。
 - `init-case` 通过命令行参数创建测试用例模板，并拒绝覆盖已有用例目录。
 - 三个角色（executor / judge / reviser）各自使用独立的模型配置，每次调用是独立的一次性对话。
+- 所有路径均可通过可选的 `skill_optimizer.json` 配置文件覆盖默认值，CLI 参数可进一步覆盖配置文件中的值。这使得框架可以在不同机器上运行而无需修改代码。
+- 不引入 YAML 依赖——配置文件使用 JSON 格式（标准库 `json` 模块）。
 
 ---
 
@@ -36,6 +39,7 @@
 
 ```text
 F:\testprogram\better_Skill\main.py
+F:\testprogram\better_Skill\skill_optimizer.json          (可选配置文件)
 F:\testprogram\better_Skill\skill_optimizer\__init__.py
 F:\testprogram\better_Skill\skill_optimizer\config.py
 F:\testprogram\better_Skill\skill_optimizer\cases.py
@@ -54,8 +58,9 @@ F:\testprogram\better_Skill\tests\test_main.py
 
 文件职责：
 
-- `main.py`：解析命令，分发 `init-case`，运行优化循环（含迭代）。
-- `config.py`：定义 `ModelConfig` 和 `Config` 数据类，`default_config()` 工厂函数。
+- `skill_optimizer.json`：可选配置文件，覆盖默认路径和模型设置。不提交到 git（加入 `.gitignore`）。
+- `main.py`：解析命令和全局路径参数，从默认值 → 配置文件 → CLI 参数构建 `Config`，分发 `init-case`，运行优化循环。
+- `config.py`：定义 `ModelConfig` 和 `Config` 数据类，`default_config()`（带路径/模型覆盖）、`load_config_file()`、`build_config()`（默认值 → 配置文件 → CLI 三层合并）。
 - `cases.py`：创建用例目录并加载用例元数据。
 - `files.py`：创建运行目录、备份 `SKILL.md`、精确比较期望文件树、写入运行产物。
 - `runner.py`：调用 Claude CLI 执行 prompt（通过 `-p` 传参，`cwd` 隔离工作目录）。
@@ -77,10 +82,18 @@ F:\testprogram\better_Skill\tests\test_main.py
 Create `F:\testprogram\better_Skill\tests\test_config.py`:
 
 ```python
+import json
+import tempfile
 import unittest
 from pathlib import Path
 
-from skill_optimizer.config import Config, ModelConfig, default_config
+from skill_optimizer.config import (
+    Config,
+    ModelConfig,
+    build_config,
+    default_config,
+    load_config_file,
+)
 
 
 class ModelConfigTests(unittest.TestCase):
@@ -107,6 +120,32 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.score_threshold, 0.85)
         self.assertEqual(config.max_iterations, 5)
         self.assertEqual(config.default_case_timeout_seconds, 120)
+
+    def test_default_config_accepts_path_overrides(self):
+        config = default_config(
+            Path("F:/testprogram/better_Skill"),
+            overrides={
+                "skill_path": "F:/custom/skill.md",
+                "test_cases_dir": "F:/custom/cases",
+            },
+        )
+
+        self.assertEqual(config.skill_path, Path("F:/custom/skill.md"))
+        self.assertEqual(config.test_cases_dir, Path("F:/custom/cases"))
+        # Non-overridden paths stay default
+        self.assertEqual(config.workspace_dir, Path("F:/testprogram/better_Skill/workspace"))
+
+    def test_default_config_accepts_model_overrides(self):
+        config = default_config(
+            Path("F:/testprogram/better_Skill"),
+            overrides={
+                "executor": {"command": "claude", "model": "claude-haiku-4-5"},
+            },
+        )
+
+        self.assertEqual(config.executor.model, "claude-haiku-4-5")
+        # Non-overridden models stay default
+        self.assertEqual(config.judge.model, "claude-opus-4-7")
 
     def test_default_config_creates_three_model_configs(self):
         config = default_config(Path("F:/testprogram/better_Skill"))
@@ -140,6 +179,73 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.judge.model, "claude-opus-4-7")
 
 
+class ConfigFileTests(unittest.TestCase):
+    def test_load_config_file_returns_dict_for_valid_json(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "skill_optimizer.json"
+            config_path.write_text(json.dumps({
+                "skill_path": "./my_skill/SKILL.md",
+                "test_cases_dir": "./my_cases",
+            }), encoding="utf-8")
+
+            result = load_config_file(config_path)
+
+            self.assertEqual(result["skill_path"], "./my_skill/SKILL.md")
+            self.assertEqual(result["test_cases_dir"], "./my_cases")
+
+    def test_load_config_file_returns_empty_dict_when_file_missing(self):
+        result = load_config_file(Path("/nonexistent/config.json"))
+
+        self.assertEqual(result, {})
+
+
+class BuildConfigTests(unittest.TestCase):
+    def test_build_config_merges_defaults_file_and_cli_overrides(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_file = root / "skill_optimizer.json"
+            config_file.write_text(json.dumps({
+                "skill_path": "./custom/SKILL.md",
+            }), encoding="utf-8")
+
+            config = build_config(
+                project_root=root,
+                config_file_path=config_file,
+                cli_overrides={"test_cases_dir": str(root / "cli_cases")},
+            )
+
+            self.assertEqual(config.project_root, root)
+            self.assertEqual(config.skill_path, root / "custom" / "SKILL.md")
+            self.assertEqual(config.test_cases_dir, root / "cli_cases")
+            # Not overridden: stays default
+            self.assertEqual(config.workspace_dir, root / "workspace")
+
+    def test_build_config_cli_wins_over_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_file = root / "skill_optimizer.json"
+            config_file.write_text(json.dumps({
+                "skill_path": "./from_file/SKILL.md",
+            }), encoding="utf-8")
+
+            config = build_config(
+                project_root=root,
+                config_file_path=config_file,
+                cli_overrides={"skill_path": str(root / "from_cli" / "SKILL.md")},
+            )
+
+            self.assertEqual(config.skill_path, root / "from_cli" / "SKILL.md")
+
+    def test_build_config_works_without_config_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+
+            config = build_config(project_root=root)
+
+            self.assertEqual(config.project_root, root)
+            self.assertEqual(config.skill_path, root / "workspace" / "SKILL.md")
+
+
 if __name__ == "__main__":
     unittest.main()
 ```
@@ -164,8 +270,10 @@ Create empty package marker `F:\testprogram\better_Skill\skill_optimizer\__init_
 Create `F:\testprogram\better_Skill\skill_optimizer\config.py`:
 
 ```python
+import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -191,22 +299,71 @@ class Config:
     reviser: ModelConfig
 
 
-def default_config(project_root: Path) -> Config:
+def default_config(project_root: Path, overrides: dict[str, Any] | None = None) -> Config:
+    """Build a Config from project_root with optional overrides.
+
+    Priority: overrides dict > default derivations from project_root.
+    Relative paths in overrides are resolved against project_root.
+    """
+    overrides = overrides or {}
     workspace_dir = project_root / "workspace"
+
+    def _path(key: str, default: Path) -> Path:
+        value = overrides.get(key)
+        if value is None:
+            return default
+        p = Path(value)
+        return p if p.is_absolute() else project_root / p
+
+    def _model(key: str, default: ModelConfig) -> ModelConfig:
+        value = overrides.get(key)
+        if value is None:
+            return default
+        if isinstance(value, dict):
+            return ModelConfig(
+                command=value.get("command", default.command),
+                model=value.get("model", default.model),
+            )
+        return default
+
     return Config(
         project_root=project_root,
-        workspace_dir=workspace_dir,
-        skill_path=workspace_dir / "SKILL.md",
-        test_cases_dir=project_root / "test_cases",
-        runs_dir=workspace_dir / "runs",
-        backups_dir=workspace_dir / "backups",
-        score_threshold=0.85,
-        max_iterations=5,
-        default_case_timeout_seconds=120,
-        executor=ModelConfig(command="claude", model="claude-sonnet-4-6"),
-        judge=ModelConfig(command="claude", model="claude-opus-4-7"),
-        reviser=ModelConfig(command="claude", model="claude-opus-4-7"),
+        workspace_dir=_path("workspace_dir", workspace_dir),
+        skill_path=_path("skill_path", workspace_dir / "SKILL.md"),
+        test_cases_dir=_path("test_cases_dir", project_root / "test_cases"),
+        runs_dir=_path("runs_dir", workspace_dir / "runs"),
+        backups_dir=_path("backups_dir", workspace_dir / "backups"),
+        score_threshold=float(overrides.get("score_threshold", 0.85)),
+        max_iterations=int(overrides.get("max_iterations", 5)),
+        default_case_timeout_seconds=int(overrides.get("default_case_timeout_seconds", 120)),
+        executor=_model("executor", ModelConfig(command="claude", model="claude-sonnet-4-6")),
+        judge=_model("judge", ModelConfig(command="claude", model="claude-opus-4-7")),
+        reviser=_model("reviser", ModelConfig(command="claude", model="claude-opus-4-7")),
     )
+
+
+def load_config_file(path: Path) -> dict[str, Any]:
+    """Load configuration from a JSON file. Returns empty dict if file not found."""
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def build_config(
+    project_root: Path,
+    config_file_path: Path | None = None,
+    cli_overrides: dict[str, Any] | None = None,
+) -> Config:
+    """Build Config with layered priority: CLI overrides > config file > defaults.
+
+    If config_file_path is not given, looks for skill_optimizer.json in project_root.
+    """
+    if config_file_path is None:
+        config_file_path = project_root / "skill_optimizer.json"
+
+    file_overrides = load_config_file(config_file_path)
+    merged = {**file_overrides, **(cli_overrides or {})}
+    return default_config(project_root, overrides=merged)
 ```
 
 - [ ] **Step 4: Run the test to verify it passes**
@@ -1327,7 +1484,7 @@ import unittest
 from pathlib import Path
 
 from main import build_parser, handle_init_case
-from skill_optimizer.config import default_config
+from skill_optimizer.config import build_config
 
 
 class MainCommandTests(unittest.TestCase):
@@ -1340,9 +1497,23 @@ class MainCommandTests(unittest.TestCase):
         self.assertEqual(args.case_name, "case_001")
         self.assertEqual(args.case_type, "files")
 
+    def test_parser_accepts_global_path_overrides(self):
+        parser = build_parser()
+
+        args = parser.parse_args([
+            "--project-root", "/tmp/proj",
+            "--skill-path", "/tmp/skill.md",
+            "--test-cases-dir", "/tmp/cases",
+            "init-case", "case_001",
+        ])
+
+        self.assertEqual(args.project_root, "/tmp/proj")
+        self.assertEqual(args.skill_path, "/tmp/skill.md")
+        self.assertEqual(args.test_cases_dir, "/tmp/cases")
+
     def test_handle_init_case_creates_template(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            config = default_config(Path(temp_dir))
+            config = build_config(Path(temp_dir))
             parser = build_parser()
             args = parser.parse_args(["init-case", "case_001", "--type", "mixed"])
 
@@ -1353,7 +1524,7 @@ class MainCommandTests(unittest.TestCase):
 
     def test_handle_init_case_returns_error_for_existing_case(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            config = default_config(Path(temp_dir))
+            config = build_config(Path(temp_dir))
             parser = build_parser()
             args = parser.parse_args(["init-case", "case_001"])
             handle_init_case(args, config)
@@ -1384,13 +1555,24 @@ Replace `F:\testprogram\better_Skill\main.py` with:
 ```python
 import argparse
 from pathlib import Path
+from typing import Any
 
 from skill_optimizer.cases import create_case_template
-from skill_optimizer.config import Config, default_config
+from skill_optimizer.config import Config, build_config
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Optimize Claude SKILL.md with test cases")
+
+    # Global path overrides (before subcommands)
+    parser.add_argument("--project-root", help="Project root directory (default: script location)")
+    parser.add_argument("--config", dest="config_file", help="Path to skill_optimizer.json config file")
+    parser.add_argument("--skill-path", help="Path to SKILL.md")
+    parser.add_argument("--workspace-dir", help="Workspace directory")
+    parser.add_argument("--test-cases-dir", help="Test cases directory")
+    parser.add_argument("--runs-dir", help="Runs output directory")
+    parser.add_argument("--backups-dir", help="Backups directory")
+
     subparsers = parser.add_subparsers(dest="command")
 
     init_case = subparsers.add_parser("init-case", help="Create a test case directory template")
@@ -1400,6 +1582,12 @@ def build_parser() -> argparse.ArgumentParser:
     init_case.add_argument("--timeout", type=int, default=120)
 
     return parser
+
+
+def _extract_cli_overrides(args: argparse.Namespace) -> dict[str, Any]:
+    """Extract non-None path overrides from parsed CLI args."""
+    path_keys = ["skill_path", "workspace_dir", "test_cases_dir", "runs_dir", "backups_dir"]
+    return {k: v for k in path_keys if (v := getattr(args, k, None)) is not None}
 
 
 def handle_init_case(args: argparse.Namespace, config: Config) -> int:
@@ -1428,10 +1616,18 @@ def run_optimization(config: Config) -> int:
 
 
 def main() -> int:
-    project_root = Path(__file__).resolve().parent
-    config = default_config(project_root)
     parser = build_parser()
     args = parser.parse_args()
+
+    project_root = Path(args.project_root) if args.project_root else Path(__file__).resolve().parent
+    config_file = Path(args.config_file) if args.config_file else None
+    cli_overrides = _extract_cli_overrides(args)
+
+    config = build_config(
+        project_root=project_root,
+        config_file_path=config_file,
+        cli_overrides=cli_overrides,
+    )
 
     if args.command == "init-case":
         return handle_init_case(args, config)
@@ -1495,7 +1691,7 @@ Append to `F:\testprogram\better_Skill\tests\test_main.py`:
         from main import run_optimization
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            config = default_config(Path(temp_dir))
+            config = build_config(Path(temp_dir))
 
             exit_code = run_optimization(config)
 
@@ -1521,7 +1717,7 @@ Append to `F:\testprogram\better_Skill\tests\test_main.py`:
         from main import run_optimization
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            config = default_config(Path(temp_dir))
+            config = build_config(Path(temp_dir))
             config.workspace_dir.mkdir(parents=True)
             config.skill_path.write_text(
                 "---\nname: test\ndescription: test skill\n---\n\nBody text",
@@ -1605,7 +1801,7 @@ Append to `F:\testprogram\better_Skill\tests\test_main.py`:
         from skill_optimizer.config import ModelConfig
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            config = default_config(Path(temp_dir))
+            config = build_config(Path(temp_dir))
             config.workspace_dir.mkdir(parents=True)
             config.skill_path.write_text(
                 "---\nname: test-skill\ndescription: test skill\n---\n\nReturn the expected answer.",
@@ -1775,7 +1971,7 @@ Append to `F:\testprogram\better_Skill\tests\test_main.py`:
         from skill_optimizer.config import ModelConfig
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            config = default_config(Path(temp_dir))
+            config = build_config(Path(temp_dir))
             config.workspace_dir.mkdir(parents=True)
             config.skill_path.write_text(
                 "---\nname: test-skill\ndescription: test skill\n---\n\nCreate files on request.",
@@ -1853,7 +2049,7 @@ Append to `F:\testprogram\better_Skill\tests\test_main.py`:
         from skill_optimizer.config import ModelConfig
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            config = default_config(Path(temp_dir))
+            config = build_config(Path(temp_dir))
             config.workspace_dir.mkdir(parents=True)
             config.skill_path.write_text(
                 "---\nname: weak-skill\ndescription: weak\n---\n\nBe unhelpful.",
@@ -2110,16 +2306,56 @@ rm -rf F:/testprogram/better_Skill/test_cases
 
 ---
 
-### Task 14: Add Example Workspace and Case Skeletons
+### Task 14: Add Example Workspace, Case Skeletons, and Config File
 
 **Files:**
+- Modify: `F:\testprogram\better_Skill\.gitignore`
+- Create: `F:\testprogram\better_Skill\skill_optimizer.json.example`
 - Create: `F:\testprogram\better_Skill\workspace\SKILL.md`
 - Create: `F:\testprogram\better_Skill\test_cases\case_001\prompt.txt`
 - Create: `F:\testprogram\better_Skill\test_cases\case_001\expected.txt`
 - Create: `F:\testprogram\better_Skill\test_cases\case_001\metadata.json`
 - Create: `F:\testprogram\better_Skill\test_cases\case_001\expected_files\.gitkeep`
 
-- [ ] **Step 1: Create sample skill**
+- [ ] **Step 1: Update .gitignore**
+
+Append to `F:\testprogram\better_Skill\.gitignore`:
+
+```text
+skill_optimizer.json
+workspace/runs/
+workspace/backups/
+```
+
+- [ ] **Step 2: Create example config file**
+
+Create `F:\testprogram\better_Skill\skill_optimizer.json.example` (not the actual config — the real `skill_optimizer.json` is gitignored):
+
+```json
+{
+  "skill_path": "./workspace/SKILL.md",
+  "test_cases_dir": "./test_cases",
+  "workspace_dir": "./workspace",
+  "runs_dir": "./workspace/runs",
+  "backups_dir": "./workspace/backups",
+  "executor": {
+    "command": "claude",
+    "model": "claude-sonnet-4-6"
+  },
+  "judge": {
+    "command": "claude",
+    "model": "claude-opus-4-7"
+  },
+  "reviser": {
+    "command": "claude",
+    "model": "claude-opus-4-7"
+  }
+}
+```
+
+Users copy this to `skill_optimizer.json` and edit paths/models for their machine.
+
+- [ ] **Step 3: Create sample skill**
 
 Create `F:\testprogram\better_Skill\workspace\SKILL.md`:
 
@@ -2134,7 +2370,7 @@ description: Answers simple test prompts with concise, verifiable output
 When given a test prompt, answer directly and preserve any exact wording requested by the prompt.
 ```
 
-- [ ] **Step 2: Create sample case files**
+- [ ] **Step 4: Create sample case files**
 
 Create `F:\testprogram\better_Skill\test_cases\case_001\prompt.txt`:
 
@@ -2161,7 +2397,7 @@ Create `F:\testprogram\better_Skill\test_cases\case_001\metadata.json`:
 
 Create `F:\testprogram\better_Skill\test_cases\case_001\expected_files\.gitkeep` as an empty file.
 
-- [ ] **Step 3: Run full test suite**
+- [ ] **Step 5: Run full test suite**
 
 ```bash
 python -m unittest discover -s F:/testprogram/better_Skill/tests -v
@@ -2197,6 +2433,23 @@ python F:/testprogram/better_Skill/main.py
 ```
 
 期望：如果存在有效的 `workspace/SKILL.md` 和至少一个用例，就加载用例并开始多轮迭代优化。如果没有安装 Claude CLI，应通过 runner 的 stderr 产物清晰失败，而不是崩溃。
+
+手动测试路径覆盖：
+
+```bash
+python F:/testprogram/better_Skill/main.py --test-cases-dir ./my_cases --skill-path ./my_skill/SKILL.md init-case case_001
+```
+
+期望：`case_001` 创建在 `./my_cases/` 下，不受默认路径影响。
+
+手动测试配置文件加载（需先复制 example 为实际配置并修改内容）：
+
+```bash
+copy F:\testprogram\better_Skill\skill_optimizer.json.example F:\testprogram\better_Skill\skill_optimizer.json
+python F:/testprogram/better_Skill/main.py init-case case_002
+```
+
+期望：使用配置文件中指定的路径。测试完成后删除 `skill_optimizer.json`（或保留用于后续开发）。
 
 ## 自查
 
