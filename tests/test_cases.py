@@ -38,6 +38,24 @@ class CreateCaseTemplateTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 create_case_template(root, "case_001", "unknown", 0.8, 30)
 
+    def test_create_case_template_with_input_files(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "test_cases"
+
+            case_dir = create_case_template(root, "case_001", "files", 0.85, 120, with_input_files=True)
+
+            input_files_dir = case_dir / "input_files"
+            self.assertTrue(input_files_dir.is_dir())
+
+    def test_create_case_template_without_input_files(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "test_cases"
+
+            case_dir = create_case_template(root, "case_001", "text", 0.85, 120)
+
+            input_files_dir = case_dir / "input_files"
+            self.assertFalse(input_files_dir.exists())
+
     def test_load_cases_sorts_directories_by_name(self):
         from skill_optimizer.cases import load_cases
 

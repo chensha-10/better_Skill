@@ -24,6 +24,7 @@ def create_case_template(
     case_type: str,
     min_score: float,
     timeout_seconds: int,
+    with_input_files: bool = False,
 ) -> Path:
     if case_type not in VALID_CASE_TYPES:
         raise ValueError(f"Unsupported case type: {case_type}")
@@ -36,6 +37,8 @@ def create_case_template(
     (case_dir / "prompt.txt").write_text("", encoding="utf-8")
     (case_dir / "expected.txt").write_text("", encoding="utf-8")
     (case_dir / "expected_files").mkdir()
+    if with_input_files:
+        (case_dir / "input_files").mkdir()
     metadata = {
         "name": case_name,
         "type": case_type,
