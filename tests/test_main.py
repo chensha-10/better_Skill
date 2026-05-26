@@ -55,6 +55,34 @@ class MainCommandTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 1)
 
+    # --- Task 5: CLI init-case --with-input-files ---
+
+    def test_parser_accepts_init_case_with_input_files(self):
+        parser = build_parser()
+
+        args = parser.parse_args(["init-case", "case_001", "--with-input-files"])
+
+        self.assertTrue(args.with_input_files)
+
+    def test_parser_init_case_defaults_with_input_files_to_false(self):
+        parser = build_parser()
+
+        args = parser.parse_args(["init-case", "case_001"])
+
+        self.assertFalse(args.with_input_files)
+
+    def test_handle_init_case_creates_input_files_when_requested(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = build_config(Path(temp_dir))
+            parser = build_parser()
+            args = parser.parse_args(["init-case", "case_001", "--with-input-files"])
+
+            exit_code = handle_init_case(args, config)
+
+            self.assertEqual(exit_code, 0)
+            case_dir = Path(temp_dir) / "test_cases" / "case_001"
+            self.assertTrue((case_dir / "input_files").is_dir())
+
     # --- Task 9: Preflight checks ---
 
     def test_run_optimization_requires_skill_file(self):

@@ -25,6 +25,8 @@ def build_parser() -> argparse.ArgumentParser:
     init_case.add_argument("--type", dest="case_type", choices=["text", "files", "mixed"], default="mixed")
     init_case.add_argument("--min-score", type=float, default=0.85)
     init_case.add_argument("--timeout", type=int, default=120)
+    init_case.add_argument("--with-input-files", action="store_true", default=False,
+                           help="Create an input_files/ directory in the case template")
 
     return parser
 
@@ -43,6 +45,7 @@ def handle_init_case(args: argparse.Namespace, config: Config) -> int:
             args.case_type,
             args.min_score,
             args.timeout,
+            with_input_files=args.with_input_files,
         )
     except FileExistsError as exc:
         print(str(exc))
