@@ -12,6 +12,7 @@ class TestCase:
     prompt_path: Path
     expected_text_path: Path | None
     expected_files_dir: Path | None
+    input_files_dir: Path | None
     case_type: str
     min_score: float
     timeout_seconds: int
@@ -70,6 +71,7 @@ def load_cases(
 
         expected_text_path = case_dir / "expected.txt"
         expected_files_dir = case_dir / "expected_files"
+        input_files_dir = case_dir / "input_files"
         cases.append(
             TestCase(
                 name=case_name,
@@ -77,6 +79,7 @@ def load_cases(
                 prompt_path=prompt_path,
                 expected_text_path=expected_text_path if expected_text_path.is_file() else None,
                 expected_files_dir=expected_files_dir if expected_files_dir.is_dir() else None,
+                input_files_dir=input_files_dir if input_files_dir.is_dir() else None,
                 case_type=case_type,
                 min_score=float(metadata.get("min_score", default_min_score)),
                 timeout_seconds=int(metadata.get("timeout_seconds", default_timeout_seconds)),

@@ -67,6 +67,35 @@ class CreateCaseTemplateTests(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 load_cases(root, default_min_score=0.85, default_timeout_seconds=120)
 
+    def test_load_cases_detects_input_files_dir(self):
+        from skill_optimizer.cases import load_cases
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "test_cases"
+            case_dir = create_case_template(root, "case_001", "files", 0.8, 60)
+            (case_dir / "prompt.txt").write_text("modify the file", encoding="utf-8")
+            (case_dir / "input_files").mkdir()
+            (case_dir / "input_files" / "source.py").write_text("x = 1", encoding="utf-8")
+
+            cases = load_cases(root, default_min_score=0.85, default_timeout_seconds=120)
+
+            self.assertEqual(len(cases), 1)
+            self.assertIsNotNone(cases[0].input_files_dir)
+            self.assertEqual(cases[0].input_files_dir, case_dir / "input_files")
+
+    def test_load_cases_input_files_dir_none_when_missing(self):
+        from skill_optimizer.cases import load_cases
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "test_cases"
+            case_dir = create_case_template(root, "case_001", "text", 0.8, 60)
+            (case_dir / "prompt.txt").write_text("hello", encoding="utf-8")
+
+            cases = load_cases(root, default_min_score=0.85, default_timeout_seconds=120)
+
+            self.assertEqual(len(cases), 1)
+            self.assertIsNone(cases[0].input_files_dir)
+
 
 if __name__ == "__main__":
     unittest.main()
