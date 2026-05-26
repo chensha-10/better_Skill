@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from skill_optimizer.files import backup_file, compare_expected_files, create_iteration_dir
+from skill_optimizer.files import backup_file, compare_expected_files, copy_input_files, create_iteration_dir
 
 
 class FileUtilityTests(unittest.TestCase):
@@ -73,6 +73,49 @@ class FileUtilityTests(unittest.TestCase):
 
             self.assertTrue(result.passed)
 
+
+    def test_copy_input_files_copies_single_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            input_dir = root / "input_files"
+            target_dir = root / "target"
+            input_dir.mkdir()
+            (input_dir / "source.py").write_text("print('hello')", encoding="utf-8")
+
+            copy_input_files(input_dir, target_dir)
+
+            copied = target_dir / "source.py"
+            self.assertTrue(copied.is_file())
+            self.assertEqual(copied.read_text(encoding="utf-8"), "print('hello')")
+
+    def test_copy_input_files_copies_nested_directories(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            input_dir = root / "input_files"
+            target_dir = root / "target"
+            (input_dir / "sub" / "nested").mkdir(parents=True)
+            (input_dir / "sub" / "nested" / "data.txt").write_text("nested content", encoding="utf-8")
+            (input_dir / "root_file.txt").write_text("root content", encoding="utf-8")
+
+            copy_input_files(input_dir, target_dir)
+
+            self.assertTrue((target_dir / "root_file.txt").is_file())
+            self.assertTrue((target_dir / "sub" / "nested" / "data.txt").is_file())
+            self.assertEqual(
+                (target_dir / "sub" / "nested" / "data.txt").read_text(encoding="utf-8"),
+                "nested content",
+            )
+
+    def test_copy_input_files_handles_empty_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            input_dir = root / "input_files"
+            target_dir = root / "target"
+            input_dir.mkdir()
+
+            copy_input_files(input_dir, target_dir)
+
+            self.assertTrue(target_dir.is_dir())
 
 if __name__ == "__main__":
     unittest.main()

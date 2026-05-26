@@ -44,3 +44,14 @@ def compare_expected_files(expected_dir: Path, actual_dir: Path) -> FileCheckRes
 def write_text_artifact(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+def copy_input_files(input_dir: Path, target_dir: Path) -> None:
+    """将 input_dir 下所有文件递归复制到 target_dir。"""
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for src in input_dir.rglob("*"):
+        if src.is_file():
+            rel = src.relative_to(input_dir)
+            dst = target_dir / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
