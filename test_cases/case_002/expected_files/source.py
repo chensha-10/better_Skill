@@ -3,7 +3,7 @@ import os
 
 
 def _analyze_sessions(sessions):
-    """Analyze session data — returns total_duration, active_days, device_types."""
+    """Return (total_duration, active_days, device_types) from session list."""
     total_duration = 0
     active_days = set()
     device_types = {}
@@ -18,7 +18,7 @@ def _analyze_sessions(sessions):
 
 
 def _describe_roles(permissions):
-    """Convert permission codes to human-readable role labels."""
+    """Return human-readable role labels for each permission."""
     role_labels = {
         "admin": "Administrator",
         "editor": "Content Editor",
@@ -46,6 +46,7 @@ def export_user_report(user_id, output_dir, include_private=False):
 
     sessions = user.get("sessions", [])
     total_duration, active_days, device_types = _analyze_sessions(sessions)
+
     most_used_device = max(device_types, key=device_types.get) if device_types else "none"
 
     report = {

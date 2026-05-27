@@ -4,16 +4,17 @@
   "workspace_dir": "./workspace",
   "runs_dir": "./workspace/runs",
   "backups_dir": "./workspace/backups",
+  "default_case_timeout_seconds": 300,
   "executor": {
     "command": "claude",
-    "model": "claude-sonnet-4-6"
+    "model": "sonnet"
   },
   "judge": {
     "command": "claude",
-    "model": "claude-opus-4-7"
+    "model": "sonnet"
   },
   "reviser": {
     "command": "claude",
-    "model": "claude-opus-4-7"
+    "model": "sonnet"
   }
 }

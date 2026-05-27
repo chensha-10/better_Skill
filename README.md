@@ -18,9 +18,9 @@
 ```
 
 三个角色各自使用独立的 Claude 模型，互不干扰：
-- **Executor（执行者）**：用当前 SKILL 响应测试 prompt
+- **Executor（执行者）**：SKILL 内容通过 `--system-prompt` 传入，用户 prompt 通过 stdin 传入，执行后产出文件
 - **Judge（裁判）**：对比实际输出与期望输出，给出 0-1 分数
-- **Reviser（修订者）**：根据失败原因改进 SKILL.md
+- **Reviser（修订者）**：根据失败原因改进 SKILL.md，修订内容通过 stdout 返回
 
 ## 项目结构
 
@@ -41,11 +41,21 @@ test_cases/case_001/      示例用例
 ## 前置条件
 
 - Python 3.10+
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) 已安装并可用
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) 已安装并可用（`claude --version` 可正常执行）
 
 ## 快速开始
 
-### 1. 创建测试用例
+### 1. 创建配置文件
+
+复制示例配置并按需修改：
+
+```bash
+cp skill_optimizer.json.example skill_optimizer.json
+```
+
+配置文件中 `model` 字段使用 Claude CLI 支持的模型别名（如 `sonnet`、`opus`、`haiku`），而非完整模型 ID。详见[配置文件](#配置文件)章节。
+
+### 2. 创建测试用例
 
 ```bash
 # 纯文本比对（期望输出是文本）
@@ -71,7 +81,7 @@ test_cases/case_001/
 └── metadata.json       # 用例元数据
 ```
 
-### 2. 编辑用例内容
+### 3. 编辑用例内容
 
 编辑 `prompt.txt` 和 `expected.txt` 填入实际的测试内容：
 
@@ -85,7 +95,7 @@ Respond with exactly: hello skill
 hello skill
 ```
 
-### 3. 准备待优化的 SKILL
+### 4. 准备待优化的 SKILL
 
 编辑 `workspace/SKILL.md`，这是将被优化器反复修订的文件：
 
@@ -100,7 +110,7 @@ description: Answers simple test prompts
 When given a test prompt, answer directly.
 ```
 
-### 4. 运行优化
+### 5. 运行优化
 
 ```bash
 python main.py
@@ -136,7 +146,7 @@ python main.py [全局参数] [子命令] [子命令参数]
 ### init-case 子命令
 
 ```bash
-python main.py init-case <用例名> [--type text|files|mixed] [--min-score 0.85] [--timeout 120]
+python main.py init-case <用例名> [--type text|files|mixed] [--min-score 0.85] [--timeout 300]
 ```
 
 | 参数 | 说明 | 默认值 |
@@ -144,7 +154,7 @@ python main.py init-case <用例名> [--type text|files|mixed] [--min-score 0.85
 | `case_name` | 用例名称（目录名） | 必填 |
 | `--type` | 用例类型 | `mixed` |
 | `--min-score` | 通过的最低分数 | `0.85` |
-| `--timeout` | 执行超时（秒） | `120` |
+| `--timeout` | 执行超时（秒） | `300` |
 | `--with-input-files` | 创建 input_files/ 初始文件目录 | `False` |
 
 ## 配置文件
@@ -160,21 +170,37 @@ python main.py init-case <用例名> [--type text|files|mixed] [--min-score 0.85
   "backups_dir": "./workspace/backups",
   "executor": {
     "command": "claude",
-    "model": "claude-sonnet-4-6"
+    "model": "sonnet"
   },
   "judge": {
     "command": "claude",
-    "model": "claude-opus-4-7"
+    "model": "sonnet"
   },
   "reviser": {
     "command": "claude",
-    "model": "claude-opus-4-7"
+    "model": "sonnet"
   },
   "score_threshold": 0.85,
   "max_iterations": 5,
-  "default_case_timeout_seconds": 120
+  "default_case_timeout_seconds": 300
 }
 ```
+
+### 模型配置
+
+`model` 字段使用 Claude CLI 支持的模型别名，**不要**使用完整模型 ID：
+
+| 别名 | 对应模型 |
+|------|---------|
+| `sonnet` | Claude Sonnet（推荐用于 executor，速度快） |
+| `opus` | Claude Opus（推荐用于 judge/reviser，质量高） |
+| `haiku` | Claude Haiku（轻量任务） |
+
+> **注意：** 使用 `claude-sonnet-4-6` 等完整 ID 会导致 API 报错。
+
+### 超时配置
+
+`default_case_timeout_seconds` 控制每个用例和修订步骤的执行超时。建议设为 `300`（5 分钟），过短会导致 executor/reviser 未完成就被终止。单个用例也可在 `metadata.json` 中通过 `timeout_seconds` 单独设置。
 
 配置优先级：**CLI 参数 > 配置文件 > 默认值**。
 

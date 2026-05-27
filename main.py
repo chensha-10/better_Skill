@@ -24,7 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     init_case.add_argument("case_name")
     init_case.add_argument("--type", dest="case_type", choices=["text", "files", "mixed"], default="mixed")
     init_case.add_argument("--min-score", type=float, default=0.85)
-    init_case.add_argument("--timeout", type=int, default=120)
+    init_case.add_argument("--timeout", type=int, default=300)
     init_case.add_argument("--with-input-files", action="store_true", default=False,
                            help="Create an input_files/ directory in the case template")
 
@@ -58,6 +58,78 @@ def handle_init_case(args: argparse.Namespace, config: Config) -> int:
     return 0
 
 
+def _evaluate_text_score(
+    result_stdout: str,
+    expected_text_path: Path,
+    case_run_dir: Path,
+    case_timeout_seconds: int,
+    judge_args: list[str],
+    judge_config: Any,
+) -> float | None:
+    """Return text similarity score or None if not applicable."""
+    from skill_optimizer.judge import build_judge_prompt, parse_judge_output, judge_text_simple
+    from skill_optimizer.runner import run_claude_prompt
+
+    expected_text = expected_text_path.read_text(encoding="utf-8").strip()
+    if not expected_text:
+        return None
+    simple = judge_text_simple(result_stdout.strip(), expected_text)
+    if simple is not None:
+        return simple.score
+    judge_prompt = build_judge_prompt(result_stdout.strip(), expected_text)
+    judge_run_dir = case_run_dir / "judge"
+    judge_result = run_claude_prompt(
+        judge_config, judge_prompt, judge_run_dir,
+        case_timeout_seconds, extra_args=judge_args,
+    )
+    if judge_result.return_code == 0:
+        parsed = parse_judge_output(judge_result.stdout.strip())
+        return parsed.score
+    return None
+
+
+def _evaluate_file_result(expected_files_dir: Path, case_run_dir: Path) -> Any:
+    """Return file comparison result or None if not applicable."""
+    from skill_optimizer.files import compare_expected_files
+    return compare_expected_files(expected_files_dir, case_run_dir)
+
+
+def _apply_revision(
+    config: Config,
+    skill_content: str,
+    failure_summary: str,
+    revision_dir: Path,
+    reviser_args: list[str],
+) -> int:
+    """Generate and apply SKILL revision. Returns 0 on success, 1 on failure."""
+    from skill_optimizer.files import backup_file
+    from skill_optimizer.optimizer import build_revision_prompt, validate_skill_revision
+    from skill_optimizer.runner import run_claude_prompt
+
+    backup_file(config.skill_path, config.backups_dir)
+
+    revision_result = run_claude_prompt(
+        config.reviser,
+        build_revision_prompt(
+            skill_content, failure_summary,
+            str(config.skill_path),
+        ),
+        revision_dir,
+        config.default_case_timeout_seconds,
+        extra_args=reviser_args, allow_tools=False,
+        cwd_override=config.project_root,
+    )
+    if revision_result.return_code != 0:
+        print(f"Revision generation failed: {revision_result.stderr}")
+        return 1
+
+    new_skill = revision_result.stdout.strip()
+    validate_skill_revision(new_skill, skill_content)
+    config.skill_path.write_text(new_skill, encoding="utf-8")
+    print("Applied revised SKILL.md (from stdout)")
+    return 0
+
+
 def _evaluate_cases(
     config: Config,
     cases: list,
@@ -80,10 +152,18 @@ def _evaluate_cases(
         if case.input_files_dir is not None:
             copy_input_files(case.input_files_dir, case_run_dir)
         prompt = case.prompt_path.read_text(encoding="utf-8")
-        execution_prompt = build_skill_execution_prompt(skill_content, prompt)
+        input_files = None
+        if case.input_files_dir is not None:
+            input_files = {}
+            for f in sorted(case.input_files_dir.rglob("*")):
+                if f.is_file():
+                    rel = f.relative_to(case.input_files_dir).as_posix()
+                    input_files[rel] = f.read_text(encoding="utf-8")
+        system_prompt, user_prompt = build_skill_execution_prompt(skill_content, prompt, input_files)
         result = run_claude_prompt(
-            config.executor, execution_prompt, case_run_dir,
+            config.executor, user_prompt, case_run_dir,
             case.timeout_seconds, extra_args=exec_args,
+            system_prompt=system_prompt,
         )
 
         if result.return_code != 0:
@@ -93,26 +173,14 @@ def _evaluate_cases(
 
         text_score = None
         if case.expected_text_path is not None:
-            expected_text = case.expected_text_path.read_text(encoding="utf-8").strip()
-            if expected_text:
-                simple = judge_text_simple(result.stdout.strip(), expected_text)
-                if simple is not None:
-                    text_score = simple.score
-                else:
-                    from skill_optimizer.judge import build_judge_prompt
-                    judge_prompt = build_judge_prompt(result.stdout.strip(), expected_text)
-                    judge_run_dir = case_run_dir / "judge"
-                    judge_result = run_claude_prompt(
-                        config.judge, judge_prompt, judge_run_dir,
-                        case.timeout_seconds, extra_args=judge_args,
-                    )
-                    if judge_result.return_code == 0:
-                        parsed = parse_judge_output(judge_result.stdout.strip())
-                        text_score = parsed.score
+            text_score = _evaluate_text_score(
+                result.stdout, case.expected_text_path, case_run_dir,
+                case.timeout_seconds, judge_args, config.judge,
+            )
 
         file_result = None
         if case.expected_files_dir is not None:
-            file_result = compare_expected_files(case.expected_files_dir, case_run_dir)
+            file_result = _evaluate_file_result(case.expected_files_dir, case_run_dir)
 
         score, passed = combine_scores(text_score=text_score, file_result=file_result, min_score=case.min_score)
         scores.append(score)
@@ -132,8 +200,8 @@ def run_optimization(
     max_iterations_override: int | None = None,
 ) -> int:
     from skill_optimizer.cases import load_cases
-    from skill_optimizer.files import create_iteration_dir
-    from skill_optimizer.optimizer import apply_revision_with_backup, build_revision_prompt
+    from skill_optimizer.files import backup_file, create_iteration_dir
+    from skill_optimizer.optimizer import build_revision_prompt, validate_skill_revision
     from skill_optimizer.runner import run_claude_prompt
 
     if not config.skill_path.is_file():
@@ -176,19 +244,9 @@ def run_optimization(
         failure_summary = "; ".join(failures) if failures else f"avg score {average_score:.2f} below threshold"
         revision_dir = iteration_dir / "revision"
         try:
-            revision_result = run_claude_prompt(
-                config.reviser,
-                build_revision_prompt(skill_content, failure_summary),
-                revision_dir,
-                config.default_case_timeout_seconds,
-                extra_args=reviser_args,
-            )
-            if revision_result.return_code != 0:
-                print(f"Revision generation failed: {revision_result.stderr}")
-                return 1
-            new_skill = revision_result.stdout.strip()
-            apply_revision_with_backup(config.skill_path, config.backups_dir, new_skill)
-            print("Applied revised SKILL.md")
+            result = _apply_revision(config, skill_content, failure_summary, revision_dir, reviser_args)
+            if result != 0:
+                return result
         except Exception as exc:
             print(f"Revision failed: {exc}")
             return 1

@@ -63,10 +63,10 @@ def default_config(project_root: Path, overrides: dict[str, Any] | None = None) 
         backups_dir=_path("backups_dir", workspace_dir / "backups"),
         score_threshold=float(overrides.get("score_threshold", 0.85)),
         max_iterations=int(overrides.get("max_iterations", 5)),
-        default_case_timeout_seconds=int(overrides.get("default_case_timeout_seconds", 120)),
-        executor=_model("executor", ModelConfig(command="claude", model="claude-sonnet-4-6")),
-        judge=_model("judge", ModelConfig(command="claude", model="claude-opus-4-7")),
-        reviser=_model("reviser", ModelConfig(command="claude", model="claude-opus-4-7")),
+        default_case_timeout_seconds=int(overrides.get("default_case_timeout_seconds", 300)),
+        executor=_model("executor", ModelConfig(command="claude", model="sonnet")),
+        judge=_model("judge", ModelConfig(command="claude", model="sonnet")),
+        reviser=_model("reviser", ModelConfig(command="claude", model="sonnet")),
     )
 
 
