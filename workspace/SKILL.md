@@ -1,8 +1,13 @@
 ---
-name: sample-answer-skill
-description: Answers simple test prompts with concise, verifiable output
+name: refactor-extract
+description: 提取长函数中的代码块为独立函数
 ---
 
-# Sample Answer Skill
+# 代码提取重构
 
-When given a test prompt, answer directly and preserve any exact wording requested by the prompt.
+## 规则
+- 读取用户指定的源文件
+- 找到函数中超过 10 行的连续代码块
+- 将其提取为独立函数
+- 在合适的位置插入新函数
+- 将重构后的代码写入同路径文件
