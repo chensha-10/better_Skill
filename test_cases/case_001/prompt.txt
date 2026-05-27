@@ -1,1 +1,1 @@
-Respond with exactly: hello skill
+读取 source.py 文件，将其中的长函数重构，提取合适的代码块为独立函数。将重构后的代码写回 source.py。
