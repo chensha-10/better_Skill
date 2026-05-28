@@ -1,4 +1,5 @@
 import argparse
+import json
 from pathlib import Path
 from typing import Any
 
@@ -148,6 +149,13 @@ def _build_failure_analysis(failures: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
+def _write_transcript(transcript_path: Path, transcript: list[dict[str, str]]) -> None:
+    transcript_path.write_text(
+        json.dumps(transcript, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 def _apply_revision(
     config: Config,
     skill_content: str,
@@ -199,7 +207,7 @@ def _evaluate_cases(
     judge_args: list[str],
 ) -> tuple[int, int, list[float], list[dict]]:
     """Run all cases for one iteration. Returns (passed_count, total, scores, failure_details)."""
-    from skill_optimizer.files import compare_expected_files, copy_input_files, copy_skill_dir, should_copy_skill_dir
+    from skill_optimizer.files import compare_expected_files, copy_input_files, copy_skill_dir, should_copy_skill_dir, write_text_artifact
     from skill_optimizer.judge import combine_scores, judge_text_simple, parse_judge_output
     from skill_optimizer.runner import build_skill_execution_prompt, run_claude_prompt
 
@@ -221,28 +229,147 @@ def _evaluate_cases(
                 if f.is_file():
                     rel = f.relative_to(case.input_files_dir).as_posix()
                     input_files[rel] = f.read_text(encoding="utf-8")
-        system_prompt, user_prompt = build_skill_execution_prompt(skill_content, prompt, input_files)
-        result = run_claude_prompt(
-            config.executor, user_prompt, case_run_dir,
-            case.timeout_seconds, extra_args=exec_args,
-            system_prompt=system_prompt,
-        )
+        if not case.dialogue_turns:
+            system_prompt, user_prompt = build_skill_execution_prompt(skill_content, prompt, input_files)
+            result = run_claude_prompt(
+                config.executor,
+                user_prompt,
+                case_run_dir,
+                case.timeout_seconds,
+                extra_args=exec_args,
+                system_prompt=system_prompt,
+                cwd_override=case_run_dir,
+            )
+            _write_transcript(
+                case_run_dir / "transcript.json",
+                [
+                    {"role": "user", "content": prompt},
+                    {"role": "assistant", "content": result.stdout.strip()},
+                ],
+            )
 
-        if result.return_code != 0:
+            if result.return_code != 0:
+                scores.append(0.0)
+                failure_details.append({
+                    "case": case.name,
+                    "score": 0.0,
+                    "threshold": case.min_score,
+                    "expected": "",
+                    "actual": f"execution failed (rc={result.return_code})",
+                })
+                continue
+
+            text_score = None
+            if case.expected_text_path is not None:
+                text_score = _evaluate_text_score(
+                    result.stdout, case.expected_text_path, case_run_dir,
+                    case.timeout_seconds, judge_args, config.judge,
+                )
+
+            file_score = None
+            if case.expected_files_dir is not None:
+                file_score = _evaluate_file_score(
+                    case.expected_files_dir, case_run_dir,
+                    case.timeout_seconds, judge_args, config.judge,
+                )
+
+            score, passed = combine_scores(text_score=text_score, file_score=file_score, min_score=case.min_score)
+            scores.append(score)
+            if passed:
+                passed_count += 1
+            else:
+                expected_text = ""
+                if case.expected_text_path and case.expected_text_path.is_file():
+                    expected_text = case.expected_text_path.read_text(encoding="utf-8").strip()
+                failure_details.append({
+                    "case": case.name,
+                    "score": score,
+                    "threshold": case.min_score,
+                    "expected": expected_text,
+                    "actual": result.stdout.strip(),
+                })
+            continue
+
+        transcript: list[dict[str, str]] = []
+        conversation_history: list[dict[str, str]] = []
+        current_user_prompt = prompt
+        dialogue_failed = False
+
+        for turn_index, dialogue_turn in enumerate(case.dialogue_turns, start=1):
+            turn_run_dir = case_run_dir / f"turn_{turn_index:03d}"
+            system_prompt, user_prompt = build_skill_execution_prompt(
+                skill_content,
+                current_user_prompt,
+                input_files,
+                conversation=conversation_history,
+            )
+            result = run_claude_prompt(
+                config.executor,
+                user_prompt,
+                turn_run_dir,
+                case.timeout_seconds,
+                extra_args=exec_args,
+                system_prompt=system_prompt,
+                cwd_override=case_run_dir,
+            )
+            transcript.append({"role": "user", "content": current_user_prompt})
+            transcript.append({"role": "assistant", "content": result.stdout.strip()})
+            _write_transcript(case_run_dir / "transcript.json", transcript)
+
+            if result.return_code != 0:
+                scores.append(0.0)
+                failure_details.append({
+                    "case": case.name,
+                    "score": 0.0,
+                    "threshold": case.min_score,
+                    "expected": "",
+                    "actual": f"execution failed (rc={result.return_code})",
+                })
+                dialogue_failed = True
+                break
+
+            conversation_history.append({"role": "user", "content": current_user_prompt})
+            conversation_history.append({"role": "assistant", "content": result.stdout.strip()})
+            current_user_prompt = dialogue_turn.user_reply
+
+        if dialogue_failed:
+            continue
+
+        final_turn_dir = case_run_dir / f"turn_{len(case.dialogue_turns) + 1:03d}"
+        system_prompt, user_prompt = build_skill_execution_prompt(
+            skill_content,
+            current_user_prompt,
+            input_files,
+            conversation=conversation_history,
+        )
+        final_result = run_claude_prompt(
+            config.executor,
+            user_prompt,
+            final_turn_dir,
+            case.timeout_seconds,
+            extra_args=exec_args,
+            system_prompt=system_prompt,
+            cwd_override=case_run_dir,
+        )
+        transcript.append({"role": "user", "content": current_user_prompt})
+        transcript.append({"role": "assistant", "content": final_result.stdout.strip()})
+        _write_transcript(case_run_dir / "transcript.json", transcript)
+
+        if final_result.return_code != 0:
             scores.append(0.0)
             failure_details.append({
                 "case": case.name,
                 "score": 0.0,
                 "threshold": case.min_score,
                 "expected": "",
-                "actual": f"execution failed (rc={result.return_code})",
+                "actual": f"execution failed (rc={final_result.return_code})",
             })
             continue
 
         text_score = None
         if case.expected_text_path is not None:
             text_score = _evaluate_text_score(
-                result.stdout, case.expected_text_path, case_run_dir,
+                final_result.stdout, case.expected_text_path, case_run_dir,
                 case.timeout_seconds, judge_args, config.judge,
             )
 
@@ -266,7 +393,7 @@ def _evaluate_cases(
                 "score": score,
                 "threshold": case.min_score,
                 "expected": expected_text,
-                "actual": result.stdout.strip(),
+                "actual": final_result.stdout.strip(),
             })
 
     return passed_count, len(cases), scores, failure_details
