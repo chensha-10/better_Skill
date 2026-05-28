@@ -117,6 +117,7 @@ class FileUtilityTests(unittest.TestCase):
 
             self.assertTrue(target_dir.is_dir())
 
+
 class SkillDirCopyTests(unittest.TestCase):
     def test_should_copy_skill_dir_returns_true_when_references_exists(self):
         with tempfile.TemporaryDirectory() as temp_dir:
