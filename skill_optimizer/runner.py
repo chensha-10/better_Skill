@@ -30,16 +30,19 @@ def run_claude_prompt(
 
     cwd = cwd_override if cwd_override is not None else run_dir
 
+    is_claude = model_config.command == "claude"
     args = [model_config.command]
-    args.append("--disable-slash-commands")
-    if allow_tools:
-        args.append("--permission-mode")
-        args.append("bypassPermissions")
+    if is_claude:
+        args.append("--disable-slash-commands")
+        if allow_tools:
+            args.append("--permission-mode")
+            args.append("bypassPermissions")
     if extra_args:
         args.extend(extra_args)
     if model_config.model:
         args.extend(["--model", model_config.model])
-    args.append("-p")
+    if is_claude:
+        args.append("-p")
 
     env = os.environ.copy()
     if model_config.model:

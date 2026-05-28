@@ -140,7 +140,7 @@ def _evaluate_cases(
     judge_args: list[str],
 ) -> tuple[int, int, list[float], list[str]]:
     """Run all cases for one iteration. Returns (passed_count, total, scores, failure_details)."""
-    from skill_optimizer.files import compare_expected_files, copy_input_files
+    from skill_optimizer.files import compare_expected_files, copy_input_files, copy_skill_dir, should_copy_skill_dir
     from skill_optimizer.judge import combine_scores, judge_text_simple, parse_judge_output
     from skill_optimizer.runner import build_skill_execution_prompt, run_claude_prompt
 
@@ -150,6 +150,8 @@ def _evaluate_cases(
 
     for case in cases:
         case_run_dir = iteration_dir / case.name
+        if should_copy_skill_dir(config.workspace_dir):
+            copy_skill_dir(config.workspace_dir, case_run_dir)
         if case.input_files_dir is not None:
             copy_input_files(case.input_files_dir, case_run_dir)
         prompt = case.prompt_path.read_text(encoding="utf-8")

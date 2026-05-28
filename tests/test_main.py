@@ -230,6 +230,73 @@ class MainCommandTests(unittest.TestCase):
             self.assertIn("better-skill", final_skill)
             self.assertTrue(any(config.backups_dir.iterdir()))
 
+    # --- Task 4: Conditional skill workspace copy ---
+
+    def test_run_one_iteration_copies_skill_references_to_case_dir(self):
+        """验证带 references/ 的 workspace 会被复制到 case_run_dir。"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = build_config(Path(temp_dir))
+            config.workspace_dir.mkdir(parents=True)
+            config.skill_path.write_text(
+                "---\nname: ref-skill\ndescription: skill with refs\n---\n\nRead references/data.txt and output its content.",
+                encoding="utf-8",
+            )
+            # 创建 references 目录和文件
+            (config.workspace_dir / "references").mkdir()
+            (config.workspace_dir / "references" / "data.txt").write_text("ref_content", encoding="utf-8")
+
+            case_dir = create_case_template(config.test_cases_dir, "case_001", "text", 0.1, 30)
+            (case_dir / "prompt.txt").write_text("output references/data.txt content", encoding="utf-8")
+            (case_dir / "expected.txt").write_text("ref_content", encoding="utf-8")
+
+            # 假 executor：读取 references/data.txt 并输出
+            fake_script = (
+                "import os; "
+                "p = os.path.join(os.getcwd(), 'references', 'data.txt'); "
+                "print(open(p).read().strip()) if os.path.exists(p) else print('FILE_NOT_FOUND')"
+            )
+            fake_executor = ModelConfig(command=sys.executable, model="")
+            fake_config = replace(config, executor=fake_executor)
+
+            exit_code = run_optimization(
+                fake_config,
+                extra_executor_args=["-c", fake_script],
+                max_iterations_override=1,
+            )
+
+            self.assertEqual(exit_code, 0)
+            # 验证 references 文件被复制到了 case_run_dir
+            case_run_dir = config.runs_dir / "iter_001" / "case_001"
+            self.assertTrue((case_run_dir / "references" / "data.txt").is_file())
+
+    def test_run_one_iteration_does_not_copy_when_no_resource_dirs(self):
+        """验证纯 SKILL.md（无 references/ 等）不会触发复制。"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = build_config(Path(temp_dir))
+            config.workspace_dir.mkdir(parents=True)
+            config.skill_path.write_text(
+                "---\nname: simple\ndescription: simple skill\n---\n\nSay hello.",
+                encoding="utf-8",
+            )
+
+            case_dir = create_case_template(config.test_cases_dir, "case_001", "text", 0.1, 30)
+            (case_dir / "prompt.txt").write_text("say hello", encoding="utf-8")
+            (case_dir / "expected.txt").write_text("hello", encoding="utf-8")
+
+            fake_executor = ModelConfig(command=sys.executable, model="")
+            fake_config = replace(config, executor=fake_executor)
+
+            exit_code = run_optimization(
+                fake_config,
+                extra_executor_args=["-c", "print('hello')"],
+                max_iterations_override=1,
+            )
+
+            self.assertEqual(exit_code, 0)
+            # 验证 case_run_dir 中没有 SKILL.md（未复制）
+            case_run_dir = config.runs_dir / "iter_001" / "case_001"
+            self.assertFalse((case_run_dir / "SKILL.md").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
