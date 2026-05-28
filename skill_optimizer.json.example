@@ -2,8 +2,9 @@
   "skill_path": "./workspace/SKILL.md",
   "test_cases_dir": "./test_cases",
   "workspace_dir": "./workspace",
-  "runs_dir": "./workspace/runs",
-  "backups_dir": "./workspace/backups",
+  "output_dir": "./output",
+  "runs_dir": "./output/runs",
+  "backups_dir": "./output/backups",
   "default_case_timeout_seconds": 300,
   "executor": {
     "command": "claude",
