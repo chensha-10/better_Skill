@@ -149,6 +149,34 @@ class CreateCaseTemplateTests(unittest.TestCase):
             self.assertIsNotNone(cases[0].expected_text_path)
             self.assertIsNone(cases[0].expected_files_dir)
 
+    def test_load_cases_parses_dialogue_script(self):
+        from skill_optimizer.cases import load_cases
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "test_cases"
+            case_dir = create_case_template(root, "case_001", "text", 0.7, 50)
+            (case_dir / "prompt.txt").write_text("help me choose", encoding="utf-8")
+            (case_dir / "expected.txt").write_text("final answer", encoding="utf-8")
+            (case_dir / "dialogue.json").write_text(
+                json.dumps(
+                    {
+                        "turns": [
+                            {
+                                "user": "Under $50",
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            cases = load_cases(root, default_min_score=0.85, default_timeout_seconds=120)
+
+            self.assertEqual(len(cases), 1)
+            self.assertEqual(len(cases[0].dialogue_turns), 1)
+            self.assertEqual(cases[0].dialogue_turns[0].user_reply, "Under $50")
+
 
 if __name__ == "__main__":
     unittest.main()
