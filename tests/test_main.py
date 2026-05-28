@@ -83,6 +83,28 @@ class MainCommandTests(unittest.TestCase):
             case_dir = Path(temp_dir) / "test_cases" / "case_001"
             self.assertTrue((case_dir / "input_files").is_dir())
 
+    # --- Task 3: --output-dir CLI parameter ---
+
+    def test_parser_accepts_output_dir_override(self):
+        parser = build_parser()
+
+        args = parser.parse_args([
+            "--output-dir", "/tmp/output",
+            "init-case", "case_001",
+        ])
+
+        self.assertEqual(args.output_dir, "/tmp/output")
+
+    def test_extract_cli_overrides_includes_output_dir(self):
+        from main import _extract_cli_overrides
+
+        parser = build_parser()
+        args = parser.parse_args(["--output-dir", "/tmp/output", "init-case", "case_001"])
+
+        overrides = _extract_cli_overrides(args)
+
+        self.assertEqual(overrides["output_dir"], "/tmp/output")
+
     # --- Task 9: Preflight checks ---
 
     def test_run_optimization_requires_skill_file(self):

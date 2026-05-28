@@ -17,6 +17,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--test-cases-dir", help="Test cases directory")
     parser.add_argument("--runs-dir", help="Runs output directory")
     parser.add_argument("--backups-dir", help="Backups directory")
+    parser.add_argument("--output-dir", help="Output directory for runs and backups")
 
     subparsers = parser.add_subparsers(dest="command")
 
@@ -33,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _extract_cli_overrides(args: argparse.Namespace) -> dict[str, Any]:
     """Extract non-None path overrides from parsed CLI args."""
-    path_keys = ["skill_path", "workspace_dir", "test_cases_dir", "runs_dir", "backups_dir"]
+    path_keys = ["skill_path", "workspace_dir", "test_cases_dir", "runs_dir", "backups_dir", "output_dir"]
     return {k: v for k in path_keys if (v := getattr(args, k, None)) is not None}
 
 
