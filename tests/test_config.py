@@ -62,7 +62,7 @@ class ConfigTests(unittest.TestCase):
 
         self.assertEqual(config.executor.model, "claude-haiku-4-5")
         # Non-overridden models stay default
-        self.assertEqual(config.judge.model, "claude-opus-4-7")
+        self.assertEqual(config.judge.model, "sonnet")
 
     def test_default_config_creates_three_model_configs(self):
         config = default_config(Path("F:/testprogram/better_Skill"))

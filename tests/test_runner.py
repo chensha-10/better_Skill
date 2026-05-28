@@ -51,12 +51,10 @@ class RunnerTests(unittest.TestCase):
         skill = "---\nname: test\ndescription: a test skill\n---\n\nBe helpful."
         user = "answer the question"
 
-        result = build_skill_execution_prompt(skill, user)
+        system_prompt, user_prompt = build_skill_execution_prompt(skill, user)
 
-        self.assertIn("Be helpful.", result)
-        self.assertIn("answer the question", result)
-        self.assertIn("<skill>", result)
-        self.assertIn("</skill>", result)
+        self.assertIn("Be helpful.", system_prompt)
+        self.assertIn("answer the question", user_prompt)
 
 
 if __name__ == "__main__":
