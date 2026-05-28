@@ -55,3 +55,25 @@ def copy_input_files(input_dir: Path, target_dir: Path) -> None:
             dst = target_dir / rel
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
+
+
+SKILL_RESOURCE_DIRS = {"references", "examples", "scripts", "assets"}
+
+
+def should_copy_skill_dir(workspace_dir: Path) -> bool:
+    """workspace 中是否有除 SKILL.md 之外的 skill 资源目录。"""
+    return any((workspace_dir / d).is_dir() for d in SKILL_RESOURCE_DIRS)
+
+
+def copy_skill_dir(workspace_dir: Path, target_dir: Path) -> None:
+    """将 workspace 中的 skill 资源复制到 target_dir，排除隐藏文件。"""
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for src in workspace_dir.rglob("*"):
+        if src.is_file():
+            parts = src.relative_to(workspace_dir).parts
+            if any(p.startswith(".") for p in parts):
+                continue
+            rel = src.relative_to(workspace_dir)
+            dst = target_dir / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)

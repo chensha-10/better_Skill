@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from skill_optimizer.files import backup_file, compare_expected_files, copy_input_files, create_iteration_dir
+from skill_optimizer.files import backup_file, compare_expected_files, copy_input_files, create_iteration_dir, should_copy_skill_dir, copy_skill_dir
 
 
 class FileUtilityTests(unittest.TestCase):
@@ -116,6 +116,80 @@ class FileUtilityTests(unittest.TestCase):
             copy_input_files(input_dir, target_dir)
 
             self.assertTrue(target_dir.is_dir())
+
+class SkillDirCopyTests(unittest.TestCase):
+    def test_should_copy_skill_dir_returns_true_when_references_exists(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            (workspace / "references").mkdir()
+            (workspace / "SKILL.md").write_text("# Skill", encoding="utf-8")
+
+            self.assertTrue(should_copy_skill_dir(workspace))
+
+    def test_should_copy_skill_dir_returns_true_when_examples_exists(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            (workspace / "examples").mkdir()
+
+            self.assertTrue(should_copy_skill_dir(workspace))
+
+    def test_should_copy_skill_dir_returns_false_for_skill_md_only(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            (workspace / "SKILL.md").write_text("# Skill", encoding="utf-8")
+
+            self.assertFalse(should_copy_skill_dir(workspace))
+
+    def test_should_copy_skill_dir_returns_false_for_empty_dir(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            self.assertFalse(should_copy_skill_dir(workspace))
+
+    def test_copy_skill_dir_copies_all_files(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir) / "workspace"
+            target = Path(temp_dir) / "target"
+            (workspace / "references").mkdir(parents=True)
+            (workspace / "SKILL.md").write_text("# Skill", encoding="utf-8")
+            (workspace / "references" / "helper.py").write_text("def help(): pass", encoding="utf-8")
+            (workspace / "references" / "sub" / "deep.txt").mkdir(parents=True)
+            (workspace / "references" / "sub" / "deep.txt" / "data.txt").write_text("deep", encoding="utf-8")
+
+            copy_skill_dir(workspace, target)
+
+            self.assertEqual((target / "SKILL.md").read_text(encoding="utf-8"), "# Skill")
+            self.assertEqual((target / "references" / "helper.py").read_text(encoding="utf-8"), "def help(): pass")
+            self.assertEqual(
+                (target / "references" / "sub" / "deep.txt" / "data.txt").read_text(encoding="utf-8"),
+                "deep",
+            )
+
+    def test_copy_skill_dir_excludes_hidden_files(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir) / "workspace"
+            target = Path(temp_dir) / "target"
+            (workspace / "references").mkdir(parents=True)
+            (workspace / ".gitignore").write_text("*.pyc", encoding="utf-8")
+            (workspace / "references" / ".hidden").write_text("secret", encoding="utf-8")
+            (workspace / "references" / "visible.py").write_text("ok", encoding="utf-8")
+
+            copy_skill_dir(workspace, target)
+
+            self.assertFalse((target / ".gitignore").exists())
+            self.assertFalse((target / "references" / ".hidden").exists())
+            self.assertTrue((target / "references" / "visible.py").is_file())
+
+    def test_copy_skill_dir_handles_empty_workspace(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir) / "workspace"
+            target = Path(temp_dir) / "target"
+            workspace.mkdir()
+
+            copy_skill_dir(workspace, target)
+
+            self.assertTrue(target.is_dir())
+
 
 if __name__ == "__main__":
     unittest.main()
