@@ -89,10 +89,49 @@ def _evaluate_text_score(
     return None
 
 
-def _evaluate_file_result(expected_files_dir: Path, case_run_dir: Path) -> Any:
-    """Return file comparison result or None if not applicable."""
+def _evaluate_file_score(
+    expected_files_dir: Path,
+    case_run_dir: Path,
+    case_timeout_seconds: int,
+    judge_args: list[str],
+    judge_config: Any,
+) -> float | None:
+    """Return file similarity score (0-1) or None if not applicable."""
     from skill_optimizer.files import compare_expected_files
-    return compare_expected_files(expected_files_dir, case_run_dir)
+    from skill_optimizer.judge import build_file_judge_prompt, parse_judge_output
+    from skill_optimizer.runner import run_claude_prompt
+
+    if not expected_files_dir.exists():
+        return None
+
+    result = compare_expected_files(expected_files_dir, case_run_dir)
+    if result.score >= 0.8:
+        return result.score
+
+    # difflib 分数低，用 AI 评分
+    expected_contents = {}
+    actual_contents = {}
+    for f in sorted(expected_files_dir.rglob("*")):
+        if f.is_file():
+            rel = f.relative_to(expected_files_dir).as_posix()
+            expected_contents[rel] = f.read_text(encoding="utf-8", errors="replace")
+            actual_path = case_run_dir / f.relative_to(expected_files_dir)
+            if actual_path.is_file():
+                actual_contents[rel] = actual_path.read_text(encoding="utf-8", errors="replace")
+
+    if not expected_contents:
+        return result.score
+
+    judge_prompt = build_file_judge_prompt(expected_contents, actual_contents)
+    judge_run_dir = case_run_dir / "file_judge"
+    judge_result = run_claude_prompt(
+        judge_config, judge_prompt, judge_run_dir,
+        case_timeout_seconds, extra_args=judge_args,
+    )
+    if judge_result.return_code == 0:
+        parsed = parse_judge_output(judge_result.stdout.strip())
+        return parsed.score
+    return result.score
 
 
 def _apply_revision(
@@ -181,11 +220,14 @@ def _evaluate_cases(
                 case.timeout_seconds, judge_args, config.judge,
             )
 
-        file_result = None
+        file_score = None
         if case.expected_files_dir is not None:
-            file_result = _evaluate_file_result(case.expected_files_dir, case_run_dir)
+            file_score = _evaluate_file_score(
+                case.expected_files_dir, case_run_dir,
+                case.timeout_seconds, judge_args, config.judge,
+            )
 
-        score, passed = combine_scores(text_score=text_score, file_result=file_result, min_score=case.min_score)
+        score, passed = combine_scores(text_score=text_score, file_score=file_score, min_score=case.min_score)
         scores.append(score)
         if passed:
             passed_count += 1

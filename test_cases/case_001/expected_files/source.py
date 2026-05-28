@@ -1,5 +1,5 @@
 def _calculate_shipping(order_subtotal):
-    """Return shipping cost based on order subtotal."""
+    """Calculate shipping cost based on order subtotal."""
     if order_subtotal < 50:
         return 5.99
     elif order_subtotal < 100:

@@ -2,5 +2,5 @@
   "name": "case_003",
   "type": "files",
   "min_score": 0.85,
-  "timeout_seconds": 600
+  "timeout_seconds": 300
 }

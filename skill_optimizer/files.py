@@ -1,3 +1,4 @@
+import difflib
 import shutil
 from dataclasses import dataclass
 from datetime import datetime
@@ -8,6 +9,7 @@ from pathlib import Path
 class FileCheckResult:
     passed: bool
     failures: list[str]
+    score: float
 
 
 def backup_file(source: Path, backups_dir: Path) -> Path:
@@ -26,8 +28,9 @@ def create_iteration_dir(runs_dir: Path, iteration: int) -> Path:
 
 def compare_expected_files(expected_dir: Path, actual_dir: Path) -> FileCheckResult:
     failures: list[str] = []
+    scores: list[float] = []
     if not expected_dir.exists():
-        return FileCheckResult(passed=True, failures=[])
+        return FileCheckResult(passed=True, failures=[], score=1.0)
 
     for expected_path in sorted(path for path in expected_dir.rglob("*") if path.is_file()):
         relative_path = expected_path.relative_to(expected_dir)
@@ -35,10 +38,17 @@ def compare_expected_files(expected_dir: Path, actual_dir: Path) -> FileCheckRes
         relative_text = relative_path.as_posix()
         if not actual_path.is_file():
             failures.append(f"{relative_text} is missing")
+            scores.append(0.0)
             continue
-        if expected_path.read_bytes() != actual_path.read_bytes():
-            failures.append(f"{relative_text} content differs")
-    return FileCheckResult(passed=not failures, failures=failures)
+        expected_text = expected_path.read_text(encoding="utf-8", errors="replace")
+        actual_text = actual_path.read_text(encoding="utf-8", errors="replace")
+        ratio = difflib.SequenceMatcher(None, expected_text, actual_text).ratio()
+        scores.append(ratio)
+        if ratio < 0.8:
+            failures.append(f"{relative_text} similarity {ratio:.2f}")
+
+    avg = sum(scores) / len(scores) if scores else 1.0
+    return FileCheckResult(passed=not failures, failures=failures, score=avg)
 
 
 def write_text_artifact(path: Path, content: str) -> None:

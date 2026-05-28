@@ -60,7 +60,7 @@ class FileUtilityTests(unittest.TestCase):
 
             self.assertFalse(result.passed)
             self.assertIn("missing.txt is missing", result.failures)
-            self.assertIn("different.txt content differs", result.failures)
+            self.assertTrue(any("different.txt" in f for f in result.failures))
 
     def test_compare_expected_files_returns_pass_when_expected_dir_missing(self):
         with tempfile.TemporaryDirectory() as temp_dir:

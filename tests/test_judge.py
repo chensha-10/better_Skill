@@ -1,6 +1,5 @@
 import unittest
 
-from skill_optimizer.files import FileCheckResult
 from skill_optimizer.judge import (
     combine_scores,
     judge_text_simple,
@@ -64,47 +63,39 @@ class JudgeTests(unittest.TestCase):
     # --- combine_scores ---
 
     def test_combine_scores_text_only_passes(self):
-        score, passed = combine_scores(text_score=0.9, file_result=None, min_score=0.85)
+        score, passed = combine_scores(text_score=0.9, file_score=None, min_score=0.85)
 
         self.assertEqual(score, 0.9)
         self.assertTrue(passed)
 
     def test_combine_scores_text_only_fails_below_threshold(self):
-        score, passed = combine_scores(text_score=0.5, file_result=None, min_score=0.85)
+        score, passed = combine_scores(text_score=0.5, file_score=None, min_score=0.85)
 
         self.assertEqual(score, 0.5)
         self.assertFalse(passed)
 
-    def test_combine_scores_file_failure_zeroes_score(self):
-        file_result = FileCheckResult(passed=False, failures=["result.md content differs"])
+    def test_combine_scores_file_low_score(self):
+        score, passed = combine_scores(text_score=0.9, file_score=0.3, min_score=0.85)
 
-        score, passed = combine_scores(text_score=0.9, file_result=file_result, min_score=0.85)
-
-        self.assertEqual(score, 0.0)
+        self.assertAlmostEqual(score, 0.6)
         self.assertFalse(passed)
 
     def test_combine_scores_files_only_success(self):
-        file_result = FileCheckResult(passed=True, failures=[])
-
-        score, passed = combine_scores(text_score=None, file_result=file_result, min_score=0.85)
+        score, passed = combine_scores(text_score=None, file_score=1.0, min_score=0.85)
 
         self.assertEqual(score, 1.0)
         self.assertTrue(passed)
 
     def test_combine_scores_mixed_both_pass(self):
-        file_result = FileCheckResult(passed=True, failures=[])
-
-        score, passed = combine_scores(text_score=0.9, file_result=file_result, min_score=0.85)
+        score, passed = combine_scores(text_score=0.9, file_score=0.9, min_score=0.85)
 
         self.assertEqual(score, 0.9)
         self.assertTrue(passed)
 
     def test_combine_scores_mixed_text_fails(self):
-        file_result = FileCheckResult(passed=True, failures=[])
+        score, passed = combine_scores(text_score=0.5, file_score=0.9, min_score=0.85)
 
-        score, passed = combine_scores(text_score=0.5, file_result=file_result, min_score=0.85)
-
-        self.assertEqual(score, 0.5)
+        self.assertAlmostEqual(score, 0.7)
         self.assertFalse(passed)
 
 

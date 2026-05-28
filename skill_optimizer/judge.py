@@ -60,16 +60,28 @@ def build_judge_prompt(actual: str, expected: str) -> str:
     )
 
 
+def build_file_judge_prompt(expected_contents: dict[str, str], actual_contents: dict[str, str]) -> str:
+    """构建文件内容 AI 评分 prompt。"""
+    parts = [
+        "You are an automated evaluator. Compare the expected file contents with the actual file contents.",
+        "The files don't need to be identical — semantic equivalence is acceptable.",
+        "Consider: same logic, same output, equivalent structure, minor formatting differences are OK.",
+        "Return ONLY valid JSON with keys score and reason. score must be between 0 and 1.\n",
+    ]
+    for filename, content in expected_contents.items():
+        parts.append(f"<expected file=\"{filename}\">\n{content}\n</expected>\n")
+    for filename, content in actual_contents.items():
+        parts.append(f"<actual file=\"{filename}\">\n{content}\n</actual>\n")
+    return "\n".join(parts)
+
+
 def combine_scores(
     text_score: float | None,
-    file_result: FileCheckResult | None,
+    file_score: float | None,
     min_score: float,
 ) -> tuple[float, bool]:
-    # File check: if it exists and fails, immediate failure
-    if file_result is not None and not file_result.passed:
+    scores = [s for s in [text_score, file_score] if s is not None]
+    if not scores:
         return 0.0, False
-    # No text score → pure files case (already passed above)
-    if text_score is None:
-        return 1.0, True
-    # Text score present → must meet threshold
-    return text_score, text_score >= min_score
+    avg = sum(scores) / len(scores)
+    return avg, avg >= min_score
