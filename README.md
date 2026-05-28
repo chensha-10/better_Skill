@@ -81,26 +81,6 @@ test_cases/case_001/
 └── metadata.json       # 用例元数据
 ```
 
-如果用例需要多轮追问，可以再放一个 `dialogue.json`：
-
-```json
-{
-  "turns": [
-    {
-      "user": "Under $50"
-    },
-    {
-      "user": "更偏实用"
-    },
-    {
-      "user": "给办公场景用"
-    }
-  ]
-}
-```
-
-这里不校验模型中间提问的原文，只脚本化后续的 `user` 回复。`turns` 写几条，就预留几轮追问。最后一轮仍然使用 `expected.txt` / `expected_files/` 做最终判定。
-
 ### 3. 编辑用例内容
 
 编辑 `prompt.txt` 和 `expected.txt` 填入实际的测试内容：
@@ -394,31 +374,3 @@ python -m unittest discover -s tests -v
 # 运行单个测试模块
 python -m unittest tests/test_config.py -v
 ```
-
-## 多轮测试用例
-
-当 skill 需要先追问用户再给出答案时，在用例目录中加入 `dialogue.json`。
-
-```json
-{
-  "turns": [
-    {
-      "user": "Under $50"
-    },
-    {
-      "user": "更偏实用"
-    },
-    {
-      "user": "给办公场景用"
-    }
-  ]
-}
-```
-
-多轮用例最佳实践：
-
-- `dialogue.json` 保持尽量短，内容要稳定、可复现。
-- 只把中间追问写进 `dialogue.json`，最终结果仍由 `expected.txt` 或 `expected_files/` 判定。
-- `turns` 按预期追问次数顺序排列，写几条就允许几轮继续问。
-- `user` 回复要短而明确，避免引入不必要歧义。
-- 调试对话流程时，查看 `output/runs/iter_NNN/case_XXX/transcript.json`。

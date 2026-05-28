@@ -229,68 +229,6 @@ class MainCommandTests(unittest.TestCase):
             self.assertIn("better-skill", final_skill)
             self.assertTrue(any(config.backups_dir.iterdir()))
 
-    def test_run_one_iteration_handles_multiturn_dialogue_case(self):
-        import json as _json
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            config = build_config(Path(temp_dir))
-            config.workspace_dir.mkdir(parents=True)
-            config.skill_path.write_text(
-                "---\nname: asky-skill\ndescription: asks a clarifying question\n---\n\nAsk for a budget first.",
-                encoding="utf-8",
-            )
-
-            case_dir = create_case_template(config.test_cases_dir, "case_001", "text", 0.85, 30)
-            (case_dir / "prompt.txt").write_text("I need a recommendation", encoding="utf-8")
-            (case_dir / "expected.txt").write_text("Use option A", encoding="utf-8")
-            (case_dir / "dialogue.json").write_text(
-                _json.dumps(
-                    {
-                        "turns": [
-                            {
-                                "user": "Under $50",
-                            }
-                        ]
-                    },
-                    ensure_ascii=False,
-                ),
-                encoding="utf-8",
-            )
-
-            counter_path = Path(temp_dir) / "turn_counter.txt"
-            fake_script = (
-                "import pathlib, sys\n"
-                f"counter = pathlib.Path(r'{counter_path}')\n"
-                "count = int(counter.read_text()) if counter.exists() else 0\n"
-                "prompt = sys.stdin.read()\n"
-                "if count == 0:\n"
-                "    assert 'I need a recommendation' in prompt\n"
-                "    print('What is your budget?')\n"
-                "else:\n"
-                "    assert 'What is your budget?' in prompt\n"
-                "    assert 'Under $50' in prompt\n"
-                "    print('Use option A')\n"
-                "counter.write_text(str(count + 1))\n"
-            )
-
-            fake_executor = ModelConfig(command=sys.executable, model="")
-            fake_config = replace(config, executor=fake_executor)
-
-            exit_code = run_optimization(
-                fake_config,
-                extra_executor_args=["-c", fake_script],
-                max_iterations_override=1,
-            )
-
-            self.assertEqual(exit_code, 0)
-            case_run_dir = config.runs_dir / "iter_001" / "case_001"
-            self.assertTrue((case_run_dir / "transcript.json").is_file())
-            transcript = _json.loads((case_run_dir / "transcript.json").read_text(encoding="utf-8"))
-            self.assertGreaterEqual(len(transcript), 3)
-            self.assertEqual(transcript[0]["role"], "user")
-            self.assertEqual(transcript[1]["role"], "assistant")
-            self.assertEqual(transcript[2]["role"], "user")
-
     # --- Task 4: Conditional skill workspace copy ---
 
     def test_run_one_iteration_copies_skill_references_to_case_dir(self):

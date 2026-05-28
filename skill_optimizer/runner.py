@@ -3,7 +3,6 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from skill_optimizer.config import ModelConfig
 from skill_optimizer.files import write_text_artifact
@@ -109,24 +108,11 @@ def build_skill_execution_prompt(
     skill_content: str,
     user_prompt: str,
     input_files: dict[str, str] | None = None,
-    conversation: list[dict[str, str]] | None = None,
 ) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for skill execution."""
     system = skill_content
 
-    parts = []
-    if conversation:
-        parts.append("<conversation>")
-        for turn in conversation:
-            role = turn.get("role", "user")
-            content = turn.get("content", "")
-            parts.append(f"<turn role=\"{role}\">\n{content}\n</turn>")
-        parts.append("</conversation>")
-        parts.append("<current_user>")
-        parts.append(user_prompt)
-        parts.append("</current_user>")
-    else:
-        parts.append(user_prompt)
+    parts = [user_prompt]
     if input_files:
         for filename, content in input_files.items():
             parts.append(f"\n<source path=\"{filename}\">\n{content}\n</source>\n")

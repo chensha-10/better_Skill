@@ -58,20 +58,6 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("Be helpful.", system_prompt)
         self.assertIn("answer the question", user_prompt)
 
-    def test_build_skill_execution_prompt_includes_conversation_history(self):
-        skill = "---\nname: test\ndescription: a test skill\n---\n\nBe helpful."
-        history = [
-            {"role": "user", "content": "I need help choosing."},
-            {"role": "assistant", "content": "What is your budget?"},
-        ]
-
-        _, user_prompt = build_skill_execution_prompt(skill, "Under $50.", conversation=history)
-
-        self.assertIn("I need help choosing.", user_prompt)
-        self.assertIn("What is your budget?", user_prompt)
-        self.assertIn("Under $50.", user_prompt)
-        self.assertIn("<conversation>", user_prompt)
-
     def test_run_claude_prompt_uses_non_shell_invocation(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             run_dir = Path(temp_dir) / "run"

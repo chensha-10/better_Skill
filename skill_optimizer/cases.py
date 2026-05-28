@@ -1,13 +1,8 @@
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 VALID_CASE_TYPES = {"text", "files", "mixed"}
-
-
-@dataclass(frozen=True)
-class DialogueTurn:
-    user_reply: str
 
 
 @dataclass(frozen=True)
@@ -21,7 +16,6 @@ class TestCase:
     case_type: str
     min_score: float
     timeout_seconds: int
-    dialogue_turns: list[DialogueTurn] = field(default_factory=list)
 
 
 def create_case_template(
@@ -83,7 +77,6 @@ def load_cases(
         expected_text_path = case_dir / "expected.txt"
         expected_files_dir = case_dir / "expected_files"
         input_files_dir = case_dir / "input_files"
-        dialogue_turns = _read_dialogue_turns(case_dir)
         has_text = case_type in {"text", "mixed"} and expected_text_path.is_file()
         has_files = case_type in {"files", "mixed"} and expected_files_dir.is_dir()
         cases.append(
@@ -97,7 +90,6 @@ def load_cases(
                 case_type=case_type,
                 min_score=float(metadata.get("min_score", default_min_score)),
                 timeout_seconds=int(metadata.get("timeout_seconds", default_timeout_seconds)),
-                dialogue_turns=dialogue_turns,
             )
         )
     return cases
@@ -108,26 +100,3 @@ def _read_metadata(case_dir: Path) -> dict:
     if not metadata_path.is_file():
         return {}
     return json.loads(metadata_path.read_text(encoding="utf-8"))
-
-
-def _read_dialogue_turns(case_dir: Path) -> list[DialogueTurn]:
-    dialogue_path = case_dir / "dialogue.json"
-    if not dialogue_path.is_file():
-        return []
-
-    data = json.loads(dialogue_path.read_text(encoding="utf-8"))
-    turns = data.get("turns", [])
-    if not isinstance(turns, list):
-        raise ValueError(f"Invalid dialogue.json turns format in {dialogue_path}")
-
-    parsed: list[DialogueTurn] = []
-    for index, turn in enumerate(turns, start=1):
-        if not isinstance(turn, dict):
-            raise ValueError(f"Invalid dialogue turn #{index} in {dialogue_path}")
-        user_reply = turn.get("user")
-        if user_reply is None:
-            user_reply = turn.get("user_reply")
-        if not isinstance(user_reply, str):
-            raise ValueError(f"Invalid dialogue turn #{index} in {dialogue_path}")
-        parsed.append(DialogueTurn(user_reply=user_reply))
-    return parsed
