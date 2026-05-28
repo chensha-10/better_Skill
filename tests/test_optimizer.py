@@ -46,11 +46,38 @@ class OptimizerTests(unittest.TestCase):
     def test_build_revision_prompt_includes_role_separation(self):
         prompt = build_revision_prompt(
             skill_content="old skill",
-            failure_summary="case_001 failed with score 0.3",
+            failure_analysis="case_001 failed with score 0.3",
         )
 
         self.assertIn("prompt engineer", prompt.lower())
         self.assertIn("NOT executing the skill", prompt)
+        self.assertIn("old skill", prompt)
+        self.assertIn("case_001 failed", prompt)
+
+    def test_build_revision_prompt_includes_expected_and_actual(self):
+        failure_analysis = (
+            "## case_001 (score=0.50, threshold=0.85)\n"
+            "### Expected:\nhello world\n"
+            "### Actual:\nwrong answer"
+        )
+        prompt = build_revision_prompt(
+            skill_content="old skill",
+            failure_analysis=failure_analysis,
+        )
+
+        self.assertIn("expected", prompt.lower())
+        self.assertIn("actual", prompt.lower())
+        self.assertIn("hello world", prompt)
+        self.assertIn("wrong answer", prompt)
+        self.assertIn("WHY", prompt)
+
+    def test_build_revision_prompt_backward_compatible_with_string(self):
+        """确保旧的字符串调用方式仍然工作。"""
+        prompt = build_revision_prompt(
+            skill_content="old skill",
+            failure_analysis="case_001 failed with score 0.3",
+        )
+
         self.assertIn("old skill", prompt)
         self.assertIn("case_001 failed", prompt)
 

@@ -23,14 +23,18 @@ def apply_revision_with_backup(skill_path: Path, backups_dir: Path, new_content:
     return backup_path
 
 
-def build_revision_prompt(skill_content: str, failure_summary: str, skill_path: str = "workspace/SKILL.md") -> str:
+def build_revision_prompt(skill_content: str, failure_analysis: str, skill_path: str = "workspace/SKILL.md") -> str:
     return (
         "You are a prompt engineer improving a Claude SKILL.md file. You are NOT "
         "executing the skill — your job is to revise the SKILL.md so that a future "
         "executor will produce correct outputs. The current SKILL content is shown "
-        "below in <current_skill>. The test failures in <failures> indicate what the "
-        "SKILL doesn't handle well.\n\n"
-        "Analyze the failures, then revise the SKILL to address every issue.\n\n"
+        "below in <current_skill>. The test failures in <failure_analysis> show "
+        "what the executor actually produced vs what was expected.\n\n"
+        "For each failure:\n"
+        "1. Compare the expected output with the actual output\n"
+        "2. Identify what in the SKILL instructions caused the executor to produce wrong output\n"
+        "3. Explain WHY the current SKILL leads to this output\n"
+        "4. Revise the SKILL to fix the root cause, not the symptom\n\n"
         "IMPORTANT: You must output the COMPLETE revised SKILL.md content as your "
         "entire response. Start your response with `---` (the YAML frontmatter delimiter) "
         "and end with the last line of the SKILL content. Do NOT use any tools. "
@@ -39,7 +43,7 @@ def build_revision_prompt(skill_content: str, failure_summary: str, skill_path: 
         "<current_skill>\n"
         f"{skill_content}\n"
         "</current_skill>\n\n"
-        "<failures>\n"
-        f"{failure_summary}\n"
-        "</failures>\n"
+        "<failure_analysis>\n"
+        f"{failure_analysis}\n"
+        "</failure_analysis>\n"
     )
