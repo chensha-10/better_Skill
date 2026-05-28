@@ -169,7 +169,6 @@ class MainCommandTests(unittest.TestCase):
             case_dir = create_case_template(config.test_cases_dir, "case_001", "files", 0.85, 30)
             (case_dir / "prompt.txt").write_text("create result.txt", encoding="utf-8")
             (case_dir / "expected_files" / "result.txt").write_text("expected content", encoding="utf-8")
-            (case_dir / "expected.txt").unlink()
 
             fake_script = (
                 "import os; "

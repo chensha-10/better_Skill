@@ -7,6 +7,24 @@ from skill_optimizer.cases import create_case_template
 
 
 class CreateCaseTemplateTests(unittest.TestCase):
+    def test_create_case_template_for_text_omits_expected_files_dir(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "test_cases"
+
+            case_dir = create_case_template(root, "case_001", "text", 0.85, 120)
+
+            self.assertTrue((case_dir / "expected.txt").is_file())
+            self.assertFalse((case_dir / "expected_files").exists())
+
+    def test_create_case_template_for_files_omits_expected_text(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "test_cases"
+
+            case_dir = create_case_template(root, "case_001", "files", 0.85, 120)
+
+            self.assertTrue((case_dir / "expected_files").is_dir())
+            self.assertFalse((case_dir / "expected.txt").exists())
+
     def test_create_case_template_writes_expected_files(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "test_cases"
@@ -113,6 +131,23 @@ class CreateCaseTemplateTests(unittest.TestCase):
 
             self.assertEqual(len(cases), 1)
             self.assertIsNone(cases[0].input_files_dir)
+
+    def test_load_cases_ignores_expected_files_for_text_case(self):
+        from skill_optimizer.cases import load_cases
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "test_cases"
+            case_dir = create_case_template(root, "case_001", "text", 0.7, 50)
+            (case_dir / "prompt.txt").write_text("hello", encoding="utf-8")
+            (case_dir / "expected.txt").write_text("hello world", encoding="utf-8")
+            (case_dir / "expected_files").mkdir()
+            (case_dir / "expected_files" / "result.txt").write_text("ignored", encoding="utf-8")
+
+            cases = load_cases(root, default_min_score=0.85, default_timeout_seconds=120)
+
+            self.assertEqual(len(cases), 1)
+            self.assertIsNotNone(cases[0].expected_text_path)
+            self.assertIsNone(cases[0].expected_files_dir)
 
 
 if __name__ == "__main__":

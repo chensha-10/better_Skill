@@ -83,5 +83,8 @@ def combine_scores(
     scores = [s for s in [text_score, file_score] if s is not None]
     if not scores:
         return 0.0, False
-    avg = sum(scores) / len(scores)
-    return avg, avg >= min_score
+    if len(scores) == 1:
+        score = scores[0]
+        return score, score >= min_score
+    score = min(scores)
+    return score, all(s >= min_score for s in scores)

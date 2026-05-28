@@ -2,3 +2,7 @@ better_Skill_transfer_package.zip
 skill_optimizer.json
 output/
 __pycache__/
+.idea/
+.pytest_cache/
+*.pyc
+.venv/

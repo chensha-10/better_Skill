@@ -35,8 +35,10 @@ def create_case_template(
 
     case_dir.mkdir(parents=True)
     (case_dir / "prompt.txt").write_text("", encoding="utf-8")
-    (case_dir / "expected.txt").write_text("", encoding="utf-8")
-    (case_dir / "expected_files").mkdir()
+    if case_type in {"text", "mixed"}:
+        (case_dir / "expected.txt").write_text("", encoding="utf-8")
+    if case_type in {"files", "mixed"}:
+        (case_dir / "expected_files").mkdir()
     if with_input_files:
         (case_dir / "input_files").mkdir()
     metadata = {
@@ -75,13 +77,15 @@ def load_cases(
         expected_text_path = case_dir / "expected.txt"
         expected_files_dir = case_dir / "expected_files"
         input_files_dir = case_dir / "input_files"
+        has_text = case_type in {"text", "mixed"} and expected_text_path.is_file()
+        has_files = case_type in {"files", "mixed"} and expected_files_dir.is_dir()
         cases.append(
             TestCase(
                 name=case_name,
                 case_dir=case_dir,
                 prompt_path=prompt_path,
-                expected_text_path=expected_text_path if expected_text_path.is_file() else None,
-                expected_files_dir=expected_files_dir if expected_files_dir.is_dir() else None,
+                expected_text_path=expected_text_path if has_text else None,
+                expected_files_dir=expected_files_dir if has_files else None,
                 input_files_dir=input_files_dir if input_files_dir.is_dir() else None,
                 case_type=case_type,
                 min_score=float(metadata.get("min_score", default_min_score)),

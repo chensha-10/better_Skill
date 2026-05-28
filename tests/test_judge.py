@@ -77,7 +77,7 @@ class JudgeTests(unittest.TestCase):
     def test_combine_scores_file_low_score(self):
         score, passed = combine_scores(text_score=0.9, file_score=0.3, min_score=0.85)
 
-        self.assertAlmostEqual(score, 0.6)
+        self.assertAlmostEqual(score, 0.3)
         self.assertFalse(passed)
 
     def test_combine_scores_files_only_success(self):
@@ -95,7 +95,13 @@ class JudgeTests(unittest.TestCase):
     def test_combine_scores_mixed_text_fails(self):
         score, passed = combine_scores(text_score=0.5, file_score=0.9, min_score=0.85)
 
-        self.assertAlmostEqual(score, 0.7)
+        self.assertAlmostEqual(score, 0.5)
+        self.assertFalse(passed)
+
+    def test_combine_scores_mixed_requires_both_modalities(self):
+        score, passed = combine_scores(text_score=0.9, file_score=0.8, min_score=0.85)
+
+        self.assertEqual(score, 0.8)
         self.assertFalse(passed)
 
 

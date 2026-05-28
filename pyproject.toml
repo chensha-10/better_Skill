@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "better-skill"
+version = "0.1.0"
+description = "Test-case driven SKILL.md optimizer"
+requires-python = ">=3.10"
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.setuptools.packages.find]
+include = ["skill_optimizer*"]

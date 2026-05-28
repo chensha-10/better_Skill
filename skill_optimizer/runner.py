@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +14,15 @@ class RunResult:
     stderr: str
     return_code: int
     run_dir: Path
+
+
+def _command_exists(command: str) -> bool:
+    if not command:
+        return False
+    command_path = Path(command)
+    if command_path.is_file():
+        return True
+    return shutil.which(command) is not None
 
 
 def run_claude_prompt(
@@ -53,6 +63,15 @@ def run_claude_prompt(
     if system_prompt:
         combined_input = f"{system_prompt}\n\n{prompt}"
 
+    if not _command_exists(model_config.command):
+        stdout = ""
+        stderr = f"Command not found: {model_config.command}"
+        return_code = 127
+        write_text_artifact(run_dir / "stdout.txt", stdout)
+        write_text_artifact(run_dir / "stderr.txt", stderr)
+        write_text_artifact(run_dir / "return_code.txt", str(return_code))
+        return RunResult(stdout=stdout, stderr=stderr, return_code=return_code, run_dir=run_dir)
+
     try:
         completed = subprocess.run(
             args,
@@ -65,7 +84,7 @@ def run_claude_prompt(
             encoding="utf-8",
             errors="replace",
             input=combined_input,
-            shell=True,
+            shell=False,
         )
         stdout = completed.stdout
         stderr = completed.stderr
