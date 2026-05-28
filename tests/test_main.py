@@ -269,6 +269,36 @@ class MainCommandTests(unittest.TestCase):
             case_run_dir = config.runs_dir / "iter_001" / "case_001"
             self.assertTrue((case_run_dir / "references" / "data.txt").is_file())
 
+    # --- Task 3: _build_failure_analysis ---
+
+    def test_build_failure_analysis_includes_expected_and_actual(self):
+        from main import _build_failure_analysis
+
+        failures = [
+            {
+                "case": "case_001",
+                "score": 0.5,
+                "threshold": 0.85,
+                "expected": "hello world",
+                "actual": "wrong answer",
+            },
+        ]
+
+        result = _build_failure_analysis(failures)
+
+        self.assertIn("case_001", result)
+        self.assertIn("hello world", result)
+        self.assertIn("wrong answer", result)
+        self.assertIn("Expected", result)
+        self.assertIn("Actual", result)
+
+    def test_build_failure_analysis_handles_empty_failures(self):
+        from main import _build_failure_analysis
+
+        result = _build_failure_analysis([])
+
+        self.assertIn("No failure details", result)
+
     def test_run_one_iteration_does_not_copy_when_no_resource_dirs(self):
         """验证纯 SKILL.md（无 references/ 等）不会触发复制。"""
         with tempfile.TemporaryDirectory() as temp_dir:

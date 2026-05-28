@@ -134,10 +134,24 @@ def _evaluate_file_score(
     return result.score
 
 
+def _build_failure_analysis(failures: list[dict]) -> str:
+    """构建 expected vs actual 对比分析。"""
+    if not failures:
+        return "No failure details available."
+    parts = []
+    for f in failures:
+        parts.append(f"## {f['case']} (score={f['score']:.2f}, threshold={f['threshold']})")
+        if f.get("expected"):
+            parts.append(f"### Expected:\n{f['expected']}")
+        if f.get("actual"):
+            parts.append(f"### Actual:\n{f['actual']}")
+    return "\n\n".join(parts)
+
+
 def _apply_revision(
     config: Config,
     skill_content: str,
-    failure_summary: str,
+    failure_analysis: str,
     revision_dir: Path,
     reviser_args: list[str],
 ) -> int:
@@ -151,7 +165,7 @@ def _apply_revision(
     revision_result = run_claude_prompt(
         config.reviser,
         build_revision_prompt(
-            skill_content, failure_summary,
+            skill_content, failure_analysis,
             str(config.skill_path),
         ),
         revision_dir,
@@ -177,7 +191,7 @@ def _evaluate_cases(
     iteration_dir: Path,
     exec_args: list[str],
     judge_args: list[str],
-) -> tuple[int, int, list[float], list[str]]:
+) -> tuple[int, int, list[float], list[dict]]:
     """Run all cases for one iteration. Returns (passed_count, total, scores, failure_details)."""
     from skill_optimizer.files import compare_expected_files, copy_input_files, copy_skill_dir, should_copy_skill_dir
     from skill_optimizer.judge import combine_scores, judge_text_simple, parse_judge_output
@@ -185,7 +199,7 @@ def _evaluate_cases(
 
     passed_count = 0
     scores: list[float] = []
-    failure_details: list[str] = []
+    failure_details: list[dict] = []
 
     for case in cases:
         case_run_dir = iteration_dir / case.name
@@ -210,7 +224,13 @@ def _evaluate_cases(
 
         if result.return_code != 0:
             scores.append(0.0)
-            failure_details.append(f"{case.name}: execution failed (rc={result.return_code})")
+            failure_details.append({
+                "case": case.name,
+                "score": 0.0,
+                "threshold": case.min_score,
+                "expected": "",
+                "actual": f"execution failed (rc={result.return_code})",
+            })
             continue
 
         text_score = None
@@ -232,7 +252,16 @@ def _evaluate_cases(
         if passed:
             passed_count += 1
         else:
-            failure_details.append(f"{case.name}: score={score:.2f} (threshold={case.min_score})")
+            expected_text = ""
+            if case.expected_text_path and case.expected_text_path.is_file():
+                expected_text = case.expected_text_path.read_text(encoding="utf-8").strip()
+            failure_details.append({
+                "case": case.name,
+                "score": score,
+                "threshold": case.min_score,
+                "expected": expected_text,
+                "actual": result.stdout.strip(),
+            })
 
     return passed_count, len(cases), scores, failure_details
 
@@ -286,10 +315,10 @@ def run_optimization(
             return 1
 
         # --- Generate and apply revision ---
-        failure_summary = "; ".join(failures) if failures else f"avg score {average_score:.2f} below threshold"
+        failure_analysis = _build_failure_analysis(failures) if failures else f"avg score {average_score:.2f} below threshold"
         revision_dir = iteration_dir / "revision"
         try:
-            result = _apply_revision(config, skill_content, failure_summary, revision_dir, reviser_args)
+            result = _apply_revision(config, skill_content, failure_analysis, revision_dir, reviser_args)
             if result != 0:
                 return result
         except Exception as exc:
