@@ -5,6 +5,7 @@
   "output_dir": "./output",
   "runs_dir": "./output/runs",
   "backups_dir": "./output/backups",
+  "skill_creator_path": null,
   "default_case_timeout_seconds": 300,
   "executor": {
     "command": "claude",
