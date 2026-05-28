@@ -327,6 +327,61 @@ class MainCommandTests(unittest.TestCase):
             case_run_dir = config.runs_dir / "iter_001" / "case_001"
             self.assertFalse((case_run_dir / "SKILL.md").exists())
 
+    # --- Task 4: _apply_revision 注入 skill-creator 作为 system prompt ---
+
+    def test_apply_revision_injects_skill_creator_as_system_prompt(self):
+        """验证配置了 skill_creator_path 时，reviser 收到 skill-creator 作为 system prompt。"""
+        import json as _json
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = build_config(Path(temp_dir))
+            config.workspace_dir.mkdir(parents=True)
+            config.skill_path.write_text(
+                "---\nname: weak\ndescription: weak\n---\n\nBe unhelpful.",
+                encoding="utf-8",
+            )
+
+            # 创建 skill-creator SKILL.md
+            skill_creator_path = Path(temp_dir) / "skill-creator" / "SKILL.md"
+            skill_creator_path.parent.mkdir(parents=True)
+            skill_creator_path.write_text(
+                "---\nname: skill-creator\n---\n\nYou are a skill improvement expert.",
+                encoding="utf-8",
+            )
+
+            # 创建 case
+            case_dir = create_case_template(config.test_cases_dir, "case_001", "text", 0.85, 30)
+            (case_dir / "prompt.txt").write_text("say hello", encoding="utf-8")
+            (case_dir / "expected.txt").write_text("hello", encoding="utf-8")
+
+            # 假 reviser：输出改进后的 SKILL.md
+            revised_skill = (
+                "---\nname: better-skill\ndescription: better\n---\n\n"
+                "Always respond with exactly what the user asks for."
+            )
+            reviser_script = f"import sys; sys.stdout.write({_json.dumps(revised_skill)})"
+
+            fake_model = ModelConfig(command=sys.executable, model="")
+            fake_config = replace(
+                config,
+                executor=fake_model,
+                reviser=fake_model,
+                skill_creator_path=skill_creator_path,
+                max_iterations=2,
+                score_threshold=0.85,
+            )
+
+            exit_code = run_optimization(
+                fake_config,
+                extra_executor_args=["-c", "print('wrong answer')"],
+                extra_reviser_args=["-c", reviser_script],
+                max_iterations_override=2,
+            )
+
+            # 验证 skill 被修订了
+            final_skill = config.skill_path.read_text(encoding="utf-8")
+            self.assertIn("better-skill", final_skill)
+
 
 if __name__ == "__main__":
     unittest.main()

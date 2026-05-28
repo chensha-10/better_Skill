@@ -162,6 +162,11 @@ def _apply_revision(
 
     backup_file(config.skill_path, config.backups_dir)
 
+    # 注入 skill-creator SKILL.md 作为 system prompt
+    system_prompt = None
+    if config.skill_creator_path and config.skill_creator_path.is_file():
+        system_prompt = config.skill_creator_path.read_text(encoding="utf-8")
+
     revision_result = run_claude_prompt(
         config.reviser,
         build_revision_prompt(
@@ -172,6 +177,7 @@ def _apply_revision(
         config.default_case_timeout_seconds,
         extra_args=reviser_args, allow_tools=False,
         cwd_override=config.project_root,
+        system_prompt=system_prompt,
     )
     if revision_result.return_code != 0:
         print(f"Revision generation failed: {revision_result.stderr}")
