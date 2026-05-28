@@ -17,6 +17,7 @@ class Config:
     workspace_dir: Path
     skill_path: Path
     test_cases_dir: Path
+    output_dir: Path
     runs_dir: Path
     backups_dir: Path
     score_threshold: float
@@ -27,6 +28,15 @@ class Config:
     reviser: ModelConfig
 
 
+def _path_static(overrides: dict[str, Any], key: str, project_root: Path, default: Path) -> Path:
+    """解析路径覆盖，相对于 project_root。"""
+    value = overrides.get(key)
+    if value is None:
+        return default
+    p = Path(value)
+    return p if p.is_absolute() else project_root / p
+
+
 def default_config(project_root: Path, overrides: dict[str, Any] | None = None) -> Config:
     """Build a Config from project_root with optional overrides.
 
@@ -35,6 +45,7 @@ def default_config(project_root: Path, overrides: dict[str, Any] | None = None) 
     """
     overrides = overrides or {}
     workspace_dir = project_root / "workspace"
+    output_dir = _path_static(overrides, "output_dir", project_root, project_root / "output")
 
     def _path(key: str, default: Path) -> Path:
         value = overrides.get(key)
@@ -59,8 +70,9 @@ def default_config(project_root: Path, overrides: dict[str, Any] | None = None) 
         workspace_dir=_path("workspace_dir", workspace_dir),
         skill_path=_path("skill_path", workspace_dir / "SKILL.md"),
         test_cases_dir=_path("test_cases_dir", project_root / "test_cases"),
-        runs_dir=_path("runs_dir", workspace_dir / "runs"),
-        backups_dir=_path("backups_dir", workspace_dir / "backups"),
+        output_dir=output_dir,
+        runs_dir=_path("runs_dir", output_dir / "runs"),
+        backups_dir=_path("backups_dir", output_dir / "backups"),
         score_threshold=float(overrides.get("score_threshold", 0.85)),
         max_iterations=int(overrides.get("max_iterations", 5)),
         default_case_timeout_seconds=int(overrides.get("default_case_timeout_seconds", 300)),

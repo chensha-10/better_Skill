@@ -31,11 +31,12 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.workspace_dir, Path("F:/testprogram/better_Skill/workspace"))
         self.assertEqual(config.skill_path, Path("F:/testprogram/better_Skill/workspace/SKILL.md"))
         self.assertEqual(config.test_cases_dir, Path("F:/testprogram/better_Skill/test_cases"))
-        self.assertEqual(config.runs_dir, Path("F:/testprogram/better_Skill/workspace/runs"))
-        self.assertEqual(config.backups_dir, Path("F:/testprogram/better_Skill/workspace/backups"))
+        self.assertEqual(config.output_dir, Path("F:/testprogram/better_Skill/output"))
+        self.assertEqual(config.runs_dir, Path("F:/testprogram/better_Skill/output/runs"))
+        self.assertEqual(config.backups_dir, Path("F:/testprogram/better_Skill/output/backups"))
         self.assertEqual(config.score_threshold, 0.85)
         self.assertEqual(config.max_iterations, 5)
-        self.assertEqual(config.default_case_timeout_seconds, 120)
+        self.assertEqual(config.default_case_timeout_seconds, 300)
 
     def test_default_config_accepts_path_overrides(self):
         config = default_config(
@@ -79,8 +80,9 @@ class ConfigTests(unittest.TestCase):
             workspace_dir=Path("C:/tmp/project/workspace"),
             skill_path=Path("C:/tmp/project/workspace/SKILL.md"),
             test_cases_dir=Path("C:/tmp/project/test_cases"),
-            runs_dir=Path("C:/tmp/project/workspace/runs"),
-            backups_dir=Path("C:/tmp/project/workspace/backups"),
+            output_dir=Path("C:/tmp/project/output"),
+            runs_dir=Path("C:/tmp/project/output/runs"),
+            backups_dir=Path("C:/tmp/project/output/backups"),
             score_threshold=0.9,
             max_iterations=3,
             default_case_timeout_seconds=60,
@@ -93,6 +95,35 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.max_iterations, 3)
         self.assertEqual(config.executor.model, "claude-sonnet-4-6")
         self.assertEqual(config.judge.model, "claude-opus-4-7")
+
+    def test_default_config_uses_output_dir_for_runs_and_backups(self):
+        config = default_config(Path("F:/testprogram/better_Skill"))
+
+        self.assertEqual(config.output_dir, Path("F:/testprogram/better_Skill/output"))
+        self.assertEqual(config.runs_dir, Path("F:/testprogram/better_Skill/output/runs"))
+        self.assertEqual(config.backups_dir, Path("F:/testprogram/better_Skill/output/backups"))
+
+    def test_default_config_accepts_output_dir_override(self):
+        config = default_config(
+            Path("F:/testprogram/better_Skill"),
+            overrides={"output_dir": "F:/custom/output"},
+        )
+
+        self.assertEqual(config.output_dir, Path("F:/custom/output"))
+        self.assertEqual(config.runs_dir, Path("F:/custom/output/runs"))
+        self.assertEqual(config.backups_dir, Path("F:/custom/output/backups"))
+
+    def test_default_config_runs_dir_override_takes_precedence_over_output_dir(self):
+        config = default_config(
+            Path("F:/testprogram/better_Skill"),
+            overrides={
+                "output_dir": "F:/custom/output",
+                "runs_dir": "F:/special/runs",
+            },
+        )
+
+        self.assertEqual(config.runs_dir, Path("F:/special/runs"))
+        self.assertEqual(config.backups_dir, Path("F:/custom/output/backups"))
 
 
 class ConfigFileTests(unittest.TestCase):
