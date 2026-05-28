@@ -89,6 +89,7 @@ class ConfigTests(unittest.TestCase):
             executor=ModelConfig(command="claude", model="claude-sonnet-4-6"),
             judge=ModelConfig(command="claude", model="claude-opus-4-7"),
             reviser=ModelConfig(command="claude", model="claude-opus-4-7"),
+            skill_creator_path=None,
         )
 
         self.assertEqual(config.score_threshold, 0.9)
@@ -112,6 +113,19 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.output_dir, Path("F:/custom/output"))
         self.assertEqual(config.runs_dir, Path("F:/custom/output/runs"))
         self.assertEqual(config.backups_dir, Path("F:/custom/output/backups"))
+
+    def test_default_config_skill_creator_path_is_none(self):
+        config = default_config(Path("F:/testprogram/better_Skill"))
+
+        self.assertIsNone(config.skill_creator_path)
+
+    def test_default_config_accepts_skill_creator_path_override(self):
+        config = default_config(
+            Path("F:/testprogram/better_Skill"),
+            overrides={"skill_creator_path": "F:/plugins/skill-creator/SKILL.md"},
+        )
+
+        self.assertEqual(config.skill_creator_path, Path("F:/plugins/skill-creator/SKILL.md"))
 
     def test_default_config_runs_dir_override_takes_precedence_over_output_dir(self):
         config = default_config(

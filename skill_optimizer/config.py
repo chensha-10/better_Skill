@@ -26,6 +26,7 @@ class Config:
     executor: ModelConfig
     judge: ModelConfig
     reviser: ModelConfig
+    skill_creator_path: Path | None
 
 
 def _path_static(overrides: dict[str, Any], key: str, project_root: Path, default: Path) -> Path:
@@ -79,6 +80,7 @@ def default_config(project_root: Path, overrides: dict[str, Any] | None = None) 
         executor=_model("executor", ModelConfig(command="claude", model="sonnet")),
         judge=_model("judge", ModelConfig(command="claude", model="sonnet")),
         reviser=_model("reviser", ModelConfig(command="claude", model="sonnet")),
+        skill_creator_path=_path("skill_creator_path", None) if "skill_creator_path" in overrides else None,
     )
 
 
